@@ -33,6 +33,7 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
 
 # typescript
 *.tsbuildinfo
@@ -41,6 +42,5 @@ yarn-error.*
 /ios
 /android
 
-# do not push .env
-.env
-
+# Ignore what is listed below for blue-sky-stock-market-watch
+config/output
