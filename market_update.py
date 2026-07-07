@@ -47,8 +47,8 @@ def get_market_data(tickers):
     data_points = {}
     for ticker in tickers:
         stock = yf.Ticker(ticker)
-        # hist = stock.history(period="30d") #30 days of historical data for June 2026
-        hist = stock.history(period="5d") #5 days of historical data till July 2, 2026
+        hist = stock.history(period="30d") #30 days of historical data
+        # hist = stock.history(period="5d") #5 days of historical data till July 2, 2026
         if not hist.empty:
             close = hist['Close'].iloc[-1]
             prev = hist['Open'].iloc[0]
