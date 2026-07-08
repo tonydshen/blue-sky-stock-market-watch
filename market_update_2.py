@@ -3,6 +3,7 @@
 # revised on 06/24/26 - Base setup and translation
 # revised on 06/25/26 - PDF pathing and fonts
 # revised on 07/07/26 - Switched to argparse for strict model and period validation
+# revised on 07/07/26 - Updated filename timestamp to include hour and minute (YYYYMMDDHHMM)
 
 import os
 import re
@@ -71,16 +72,14 @@ def augment_prompt(base_prompt, data_points, period):
     return guardrails + base_prompt
 
 def generate_pdf(text, filename, use_chinese=False):
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    output_dir = os.getenv("OUTPUT_PATH")
+    output_dir = os.getenv("OUTPUT_PATH", ".") # Default to current dir if missing
+    pdf_filename = os.path.join(output_dir, filename)
     
     if use_chinese:
-        pdf_filename = os.path.join(output_dir, f"market_recap_{today_str}_zh.pdf")
         font_path = os.getenv("CHINESE_FONT_PATH")
         pdfmetrics.registerFont(TTFont('ChineseFont', font_path))
         font_name = 'ChineseFont'
     else:
-        pdf_filename = os.path.join(output_dir, f"market_recap_{today_str}.pdf")
         font_name = 'Helvetica'
 
     doc = SimpleDocTemplate(
@@ -125,14 +124,14 @@ def generate_pdf(text, filename, use_chinese=False):
 def main():
     # --- ARGUMENT PARSING & VALIDATION ---
     parser = argparse.ArgumentParser(description="Generate AI-powered market recap reports.")
-    parser.add_argument("--model", type=str, required=True, help="Gemini model to use (e.g., gemini-2.5-flash)")
+    parser.add_argument("--model", type=str, required=True, help="Gemini model to use (e.g., gemini-2.5-pro)")
     parser.add_argument("--period", type=str, required=True, help="Historical data period (e.g., 1d, 5d, 1mo, 3mo, 6mo, ytd, 1y)")
     args = parser.parse_args()
 
     # 1. Validate Period Argument
     period_input = args.period.lower()
     
-    # Auto-correct common shorthand mistakes (e.g., user types '1m' instead of '1mo')
+    # Auto-correct common shorthand mistakes
     if period_input == '1m': period_input = '1mo'
     elif period_input == '3m': period_input = '3mo'
     elif period_input == '6m': period_input = '6mo'
@@ -145,9 +144,8 @@ def main():
     # 2. Client Setup & Validate Model Argument
     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
     
-    print(f"[{datetime.now()}] Validating requested model '{args.model}' against your account...")
+    print(f"[{datetime.now()}] Validating requested model '{args.model}'...")
     try:
-        # Fetch available models directly from the API
         available_models = [m.name.replace('models/', '') for m in client.models.list()]
         
         if args.model not in available_models:
@@ -167,13 +165,15 @@ def main():
     data = get_market_data(tickers, period_input)
     final_prompt = augment_prompt(base_prompt, data, period_input)
 
+    # Generate timestamp in YYYYMMDDHHMM format
+    timestamp_str = datetime.now().strftime("%Y%m%d%H%M")
+
     # Generate English Recap
     print(f"[{datetime.now()}] Generating English report...")
     response = client.models.generate_content(model=args.model, contents=final_prompt)
     english_text = response.text
 
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    generate_pdf(english_text, f"market_recap_{today_str}.pdf", use_chinese=False)
+    generate_pdf(english_text, f"market_recap_{timestamp_str}.pdf", use_chinese=False)
 
     # Generate Chinese Recap
     print(f"[{datetime.now()}] Translating to Chinese...")
@@ -182,9 +182,9 @@ def main():
         f"Maintain the exact formatting, numbers, and bullet points. Do not add external commentary:\n\n{english_text}"
     )
     zh_response = client.models.generate_content(model=args.model, contents=trans_prompt)
-    generate_pdf(zh_response.text, f"market_recap_{today_str}_zh.pdf", use_chinese=True)
+    generate_pdf(zh_response.text, f"market_recap_{timestamp_str}_zh.pdf", use_chinese=True)
 
-    print(f"[{datetime.now()}] Both reports generated successfully.")
+    print(f"[{datetime.now()}] Both reports generated successfully: market_recap_{timestamp_str}.pdf")
 
 if __name__ == "__main__":
     main()
