@@ -7,7 +7,8 @@
 # updated for bssetdb, a branch of bsset
 # Exit immediately if a command exits with a non-zero status
 # TS revised to suit blue-sky-post
-#
+# 08/17/26
+# Used for blue-sky-stock-market-watch
 set -e
 
 echo "--- Starting Deployment ---"
