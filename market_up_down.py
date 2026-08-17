@@ -14,22 +14,33 @@
 # from TICKERS_PATH (config/tickers/tickers.txt) is used. With neither given:
 #   uv run market_up_down.py        # 1 day of data for config/tickers/tickers.txt
 #
-# Output: config/output/market-up-down-YYYYMMDDHHMM.csv
+# Output: config/output/market-up-down-YYYYMMDDHHMM.csv and the same-named .html
+# (a sortable report with the identical data, plus a link to the analysis page).
 # CSV fields: symbol, high price, high date and hour, low price, low date and hour,
+#             current_price (the price at the time the script was run),
 #             change (high - low, signed: positive when the low came first and the
 #             symbol rose, negative when the high came first and the symbol fell),
-#             change_percent (change over the starting price -- the low for a rise,
-#             the high for a fall), change_days (calendar days spanned, counting
-#             both the high and low dates), implied_volatility (today's at-the-money
-#             option IV in percent; blank when the symbol has no listed options),
-#             expected_move_percent (IV rescaled to the change_days window),
-#             realized_vs_implied (how many times larger the actual move was),
-#             realized_volatility (annualized, from the hourly bars),
-#             period_return_percent (first open to last close),
-#             close_in_range_percent (0 = closed at the low, 100 = at the high)
+#             change_median (change / 2), change_percent (change over the starting
+#             price -- the low for a rise, the high for a fall),
+#             change_pct_from_high (current_price vs. high_price, percent; negative
+#             is a fall from the high, positive a rise above it),
+#             change_pct_from_low (current_price vs. low_price, percent; negative is
+#             a further fall below the low, positive a recovery above it),
+#             change_median_price ((low_price + high_price) / 2),
+#             change_pct_from_change_median_price (current_price vs.
+#             change_median_price, signed percent),
+#             change_days (calendar days spanned, counting both the high and low
+#             dates), implied_volatility (today's at-the-money option IV in percent;
+#             blank when the symbol has no listed options), expected_move_percent
+#             (IV rescaled to the change_days window), realized_vs_implied (how many
+#             times larger the actual move was), realized_volatility (annualized,
+#             from the hourly bars), period_return_percent (first open to last
+#             close), close_in_range_percent (0 = closed at the low, 100 = at the
+#             high)
 import os
 import sys
 import csv
+import html
 import math
 import yfinance as yf
 from datetime import datetime, timedelta
@@ -38,6 +49,47 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DEFAULT_PERIOD = "1"
+
+# Column order for both the CSV and HTML reports: (field key, HTML header label,
+# whether the column can be sorted in the HTML report, cell type for sorting).
+# start_date and end_date are the same for every row in a report, so sorting by
+# them is meaningless -- they're the only two columns excluded from sorting.
+REPORT_COLUMNS = [
+    ("symbol", "Symbol", True, "text"),
+    ("high_price", "High Price", True, "num"),
+    ("high_when", "High Date/Hour", True, "text"),
+    ("low_price", "Low Price", True, "num"),
+    ("low_when", "Low Date/Hour", True, "text"),
+    ("current_price", "Current Price", True, "num"),
+    ("change", "Change", True, "num"),
+    ("change_median", "Change (Median)", True, "num"),
+    ("change_percent", "Change %", True, "num"),
+    ("change_pct_from_high", "% From High", True, "num"),
+    ("change_pct_from_low", "% From Low", True, "num"),
+    ("change_median_price", "Median Price", True, "num"),
+    ("change_pct_from_change_median_price", "% From Median", True, "num"),
+    ("change_days", "Days", True, "num"),
+    ("implied_volatility", "Implied Vol %", True, "num"),
+    ("expected_move_percent", "Expected Move %", True, "num"),
+    ("realized_vs_implied", "Realized/Implied", True, "num"),
+    ("realized_volatility", "Realized Vol %", True, "num"),
+    ("period_return_percent", "Period Return %", True, "num"),
+    ("close_in_range_percent", "Close in Range %", True, "num"),
+    ("start_date", "Start Date", False, "text"),
+    ("end_date", "End Date", False, "text"),
+]
+
+# Columns whose sign carries meaning worth calling out with color (gains in
+# green, losses in red) so the report reads at a glance.
+SIGNED_COLUMNS = {
+    "change",
+    "change_median",
+    "change_percent",
+    "change_pct_from_high",
+    "change_pct_from_low",
+    "change_pct_from_change_median_price",
+    "period_return_percent",
+}
 
 # Skip option expiries nearer than this when sampling implied volatility.
 IV_MIN_DAYS = 7
@@ -255,12 +307,18 @@ def get_high_low(ticker, query):
     of the hourly High column; the low point is the min of the hourly Low
     column. Returns a dict of result fields, or None if no data is available.
 
-    `change` is the high-low spread signed by trend: positive when the low came
-    first and the symbol rose to its high, negative when the high came first and
-    the symbol fell to its low. `change_percent` expresses that move against the
-    price it started from -- the low for a rise, the high for a fall.
-    `change_days` is the calendar span the move covered, counting both the high
-    and low dates (1 when they fall on the same day).
+    `current_price` is the price at the time the script is run. `change` is the
+    high-low spread signed by trend: positive when the low came first and the
+    symbol rose to its high, negative when the high came first and the symbol
+    fell to its low. `change_median` is change / 2. `change_percent` expresses
+    that move against the price it started from -- the low for a rise, the high
+    for a fall. `change_pct_from_high` and `change_pct_from_low` measure
+    `current_price` against `high_price` and `low_price`, signed (negative for a
+    fall, positive for a rise/recovery). `change_median_price` is the midpoint
+    of the low and high, and `change_pct_from_change_median_price` measures
+    `current_price` against that midpoint, signed. `change_days` is the calendar
+    span the move covered, counting both the high and low dates (1 when they
+    fall on the same day).
 
     The remaining fields put that move in context: `expected_move_percent` is
     the implied volatility rescaled from annual to the change_days window,
@@ -295,6 +353,26 @@ def get_high_low(ticker, query):
 
     last_close = float(hist['Close'].iloc[-1])
 
+    # Live price as of right now; falls back to the last available close if the
+    # live quote can't be fetched.
+    try:
+        current_price = float(stock.fast_info["lastPrice"])
+    except Exception:
+        current_price = last_close
+
+    change_median = change / 2
+    change_median_price = (float(low_price) + float(high_price)) / 2
+
+    change_pct_from_high = (
+        (current_price - float(high_price)) / float(high_price) * 100
+    ) if high_price else 0.0
+    change_pct_from_low = (
+        (current_price - float(low_price)) / float(low_price) * 100
+    ) if low_price else 0.0
+    change_pct_from_change_median_price = (
+        (current_price - change_median_price) / change_median_price * 100
+    ) if change_median_price else 0.0
+
     # Options are a separate request and not every symbol has them; a failure
     # here should not cost us the price row.
     try:
@@ -326,8 +404,14 @@ def get_high_low(ticker, query):
         "high_when": high_idx.strftime("%Y-%m-%d %H:%M"),
         "low_price": round(float(low_price), 2),
         "low_when": low_idx.strftime("%Y-%m-%d %H:%M"),
+        "current_price": round(current_price, 2),
         "change": round(change, 2),
+        "change_median": round(change_median, 2),
         "change_percent": round(change_percent, 2),
+        "change_pct_from_high": round(change_pct_from_high, 2),
+        "change_pct_from_low": round(change_pct_from_low, 2),
+        "change_median_price": round(change_median_price, 2),
+        "change_pct_from_change_median_price": round(change_pct_from_change_median_price, 2),
         "change_days": change_days,
         "implied_volatility": implied_volatility,
         "expected_move_percent": round_or_none(expected_move_percent),
@@ -336,6 +420,315 @@ def get_high_low(ticker, query):
         "period_return_percent": round_or_none(period_return_percent),
         "close_in_range_percent": round_or_none(close_in_range_percent),
     }
+
+
+# Shared look for every report page (the up/down table and the analysis page),
+# so the two feel like one report system. Plain string, not an f-string -- its
+# braces are literal CSS and go in via substitution, not interpolation.
+REPORT_CSS = """
+  :root {
+    --bg: #f5f7fa;
+    --panel: #ffffff;
+    --border: #e1e5ea;
+    --text: #1c2530;
+    --muted: #5b6673;
+    --accent: #1a56c4;
+    --accent-text: #ffffff;
+    --pos: #0f7b3e;
+    --neg: #c2261e;
+    --header-bg: #10233f;
+    --header-text: #eef2f8;
+    --row-alt: #fafbfd;
+    --row-hover: #eef3fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1420;
+      --panel: #171f2e;
+      --border: #2b3648;
+      --text: #e7ecf5;
+      --muted: #97a3ba;
+      --accent: #6fa2ff;
+      --accent-text: #0e1420;
+      --pos: #46d18a;
+      --neg: #ff7a72;
+      --row-alt: #1b2536;
+      --row-hover: #223050;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1420;
+    --panel: #171f2e;
+    --border: #2b3648;
+    --text: #e7ecf5;
+    --muted: #97a3ba;
+    --accent: #6fa2ff;
+    --accent-text: #0e1420;
+    --pos: #46d18a;
+    --neg: #ff7a72;
+    --row-alt: #1b2536;
+    --row-hover: #223050;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px 16px 64px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 1400px; margin: 0 auto; }
+  header.report-header {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  header.report-header h1 {
+    margin: 0 0 6px;
+    font-size: 1.9rem;
+    letter-spacing: -0.01em;
+  }
+  header.report-header .subtitle {
+    margin: 0 0 8px;
+    font-size: 1.15rem;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  header.report-header .meta {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(16, 35, 63, 0.06);
+  }
+  .table-scroll {
+    overflow-x: auto;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.86rem;
+    white-space: nowrap;
+  }
+  thead th {
+    position: sticky;
+    top: 0;
+    background: var(--header-bg);
+    color: var(--header-text);
+    text-align: right;
+    padding: 0;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+    z-index: 1;
+  }
+  thead th:first-child { text-align: left; }
+  thead th.unsortable {
+    padding: 10px 12px;
+    text-align: center;
+    color: #b7c2d6;
+  }
+  .sort-btn {
+    all: unset;
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    cursor: pointer;
+    text-align: inherit;
+  }
+  .sort-btn:hover { background: rgba(255, 255, 255, 0.08); }
+  .sort-arrow { display: inline-block; width: 12px; margin-left: 2px; }
+  tbody td {
+    padding: 8px 12px;
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+    font-variant-numeric: tabular-nums;
+  }
+  tbody td:first-child { text-align: left; font-weight: 600; }
+  tbody tr:nth-child(even) { background: var(--row-alt); }
+  tbody tr:hover { background: var(--row-hover); }
+  td.pos { color: var(--pos); font-weight: 600; }
+  td.neg { color: var(--neg); font-weight: 600; }
+  .analysis-link {
+    text-align: center;
+    margin: 28px 0;
+  }
+  .analysis-link a {
+    display: inline-block;
+    padding: 12px 28px;
+    background: var(--accent);
+    color: var(--accent-text);
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+  .analysis-link a:hover { opacity: 0.88; }
+  footer {
+    text-align: center;
+    margin-top: 32px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  footer a:hover { text-decoration: underline; }
+  .hint {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.82rem;
+    margin: 0 0 12px;
+  }
+"""
+
+
+def render_footer_html():
+    """Footer shared by every report page: created date, publisher link, copyright."""
+    today_label = datetime.now().strftime("%B %d, %Y")
+    current_year = datetime.now().year
+    return (
+        "  <footer>\n"
+        f"    <p>Created on {html.escape(today_label)}</p>\n"
+        '    <p><a href="https://datacommlab.com" target="_blank" rel="noopener">'
+        f"Data Communications Lab</a> &copy; {current_year}</p>\n"
+        "  </footer>"
+    )
+
+
+def render_html_report(
+    rows, start_label, end_label, generated_at, symbol_count, tickers_name,
+    period_desc, analysis_href,
+):
+    """Render the sortable HTML report as a single self-contained page.
+
+    `rows` are the per-symbol dicts returned by get_high_low, in the order they
+    should appear. Every CSV field is shown; start_date/end_date are filled in
+    from start_label/end_label since they aren't part of the row dict.
+    """
+    header_cells = []
+    for key, label, sortable, cell_type in REPORT_COLUMNS:
+        if sortable:
+            header_cells.append(
+                f'<th data-type="{cell_type}"><button type="button" class="sort-btn">'
+                f'{html.escape(label)}<span class="sort-arrow"></span></button></th>'
+            )
+        else:
+            header_cells.append(f'<th class="unsortable">{html.escape(label)}</th>')
+    header_html = "\n          ".join(header_cells)
+
+    body_rows = []
+    for row in rows:
+        data = dict(row)
+        data["start_date"] = start_label
+        data["end_date"] = end_label
+        cells = []
+        for key, _label, _sortable, cell_type in REPORT_COLUMNS:
+            value = data.get(key)
+            text = "" if value is None else str(value)
+            css_class = ""
+            if key in SIGNED_COLUMNS and value is not None:
+                css_class = ' class="pos"' if value > 0 else (' class="neg"' if value < 0 else "")
+            if cell_type == "num":
+                data_value = "" if value is None else str(value)
+                cells.append(f'<td data-value="{data_value}"{css_class}>{html.escape(text)}</td>')
+            else:
+                cells.append(f'<td{css_class}>{html.escape(text)}</td>')
+        body_rows.append(f"        <tr>\n          " + "\n          ".join(cells) + "\n        </tr>")
+    body_html = "\n".join(body_rows)
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blue Sky Stock Volatility Report</title>
+<style>{REPORT_CSS}</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="report-header">
+    <h1>Blue Sky Stock Volatility Report</h1>
+    <p class="subtitle">{html.escape(start_label)} &ndash; {html.escape(end_label)}</p>
+    <p class="meta">Generated {html.escape(generated_at)} &middot; {symbol_count} symbols from {html.escape(tickers_name)} &middot; {html.escape(period_desc)}</p>
+  </header>
+
+  <p class="hint">Click a column header to sort; click again to reverse. Start Date and End Date are fixed for this report and aren't sortable.</p>
+
+  <div class="panel">
+    <div class="table-scroll">
+      <table>
+        <thead>
+        <tr>
+          {header_html}
+        </tr>
+        </thead>
+        <tbody>
+{body_html}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="analysis-link">
+    <a href="{html.escape(analysis_href)}">Click here to read report analysis &rarr;</a>
+  </div>
+
+{render_footer_html()}
+</div>
+
+<script>
+(function () {{
+  document.querySelectorAll(".sort-btn").forEach(function (btn) {{
+    btn.addEventListener("click", function () {{
+      var th = btn.closest("th");
+      var table = th.closest("table");
+      var tbody = table.tBodies[0];
+      var index = Array.prototype.indexOf.call(th.parentNode.children, th);
+      var type = th.dataset.type;
+      var nextDir = th.dataset.dir === "asc" ? "desc" : "asc";
+
+      table.querySelectorAll("th[data-type]").forEach(function (h) {{
+        delete h.dataset.dir;
+        var arrow = h.querySelector(".sort-arrow");
+        if (arrow) arrow.textContent = "";
+      }});
+      th.dataset.dir = nextDir;
+      btn.querySelector(".sort-arrow").textContent = nextDir === "asc" ? " \\u25B2" : " \\u25BC";
+
+      var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
+      rows.sort(function (a, b) {{
+        var cellA = a.children[index];
+        var cellB = b.children[index];
+        var va = type === "num" ? cellA.dataset.value : cellA.textContent.trim().toLowerCase();
+        var vb = type === "num" ? cellB.dataset.value : cellB.textContent.trim().toLowerCase();
+        var emptyA = va === "" || va === undefined;
+        var emptyB = vb === "" || vb === undefined;
+        if (emptyA && emptyB) return 0;
+        if (emptyA) return 1;
+        if (emptyB) return -1;
+        var cmp;
+        if (type === "num") {{
+          cmp = parseFloat(va) - parseFloat(vb);
+        }} else {{
+          cmp = va < vb ? -1 : (va > vb ? 1 : 0);
+        }}
+        return nextDir === "asc" ? cmp : -cmp;
+      }});
+      rows.forEach(function (r) {{ tbody.appendChild(r); }});
+    }});
+  }});
+}})();
+</script>
+</body>
+</html>
+"""
 
 
 def main():
@@ -353,6 +746,8 @@ def main():
     output_dir = os.getenv("OUTPUT_PATH")
     timestamp = datetime.now().strftime("%Y%m%d%H%M")
     output_path = os.path.join(output_dir, f"market-up-down-{timestamp}.csv")
+    html_output_path = os.path.join(output_dir, f"market-up-down-{timestamp}.html")
+    analysis_filename = f"market-analysis-{timestamp}.html"
 
     header = [
         "symbol",
@@ -360,8 +755,14 @@ def main():
         "high_date_hour",
         "low_price",
         "low_date_hour",
+        "current_price",
         "change",
+        "change_median",
         "change_percent",
+        "change_pct_from_high",
+        "change_pct_from_low",
+        "change_median_price",
+        "change_pct_from_change_median_price",
         "change_days",
         "implied_volatility",
         "expected_move_percent",
@@ -377,6 +778,7 @@ def main():
         f"[{datetime.now()}] Fetching hourly data ({period_desc}) for {len(tickers)} symbols "
         f"from {os.path.basename(tickers_path)}..."
     )
+    rows_data = []
     with open(output_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(header)
@@ -395,8 +797,14 @@ def main():
                 row["high_when"],
                 row["low_price"],
                 row["low_when"],
+                row["current_price"],
                 row["change"],
+                row["change_median"],
                 row["change_percent"],
+                row["change_pct_from_high"],
+                row["change_pct_from_low"],
+                row["change_median_price"],
+                row["change_pct_from_change_median_price"],
                 row["change_days"],
                 csv_value(row["implied_volatility"]),
                 csv_value(row["expected_move_percent"]),
@@ -407,6 +815,7 @@ def main():
                 start_label,
                 end_label,
             ])
+            rows_data.append(row)
             iv_desc = "n/a" if row["implied_volatility"] is None else (
                 f"{row['implied_volatility']}% (expected {row['expected_move_percent']}%, "
                 f"{row['realized_vs_implied']}x)"
@@ -417,12 +826,31 @@ def main():
                 f"change {row['change']} ({row['change_percent']}%) over {row['change_days']}d"
             )
             print(
+                f"      current {row['current_price']} "
+                f"(from high {row['change_pct_from_high']}%, from low {row['change_pct_from_low']}%, "
+                f"from median {row['change_pct_from_change_median_price']}%)"
+            )
+            print(
                 f"      IV {iv_desc}, RV {row['realized_volatility']}%, "
                 f"return {row['period_return_percent']}%, "
                 f"close {row['close_in_range_percent']}% of range"
             )
 
+    html_report = render_html_report(
+        rows_data,
+        start_label,
+        end_label,
+        generated_at=datetime.now().strftime("%B %d, %Y %I:%M %p"),
+        symbol_count=len(rows_data),
+        tickers_name=os.path.basename(tickers_path),
+        period_desc=period_desc,
+        analysis_href=analysis_filename,
+    )
+    with open(html_output_path, "w") as f:
+        f.write(html_report)
+
     print(f"[{datetime.now()}] Wrote output to {output_path}")
+    print(f"[{datetime.now()}] Wrote output to {html_output_path}")
 
 
 if __name__ == "__main__":
