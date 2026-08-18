@@ -6,7 +6,9 @@
 # at the top of the site's links page.
 #
 # Usage: market_range_vol.sh [-p <period>] [-f <tickers file>]
-#   -p  period, forwarded to market_up_down.py -p (default: 14)
+#   -p  period, forwarded to market_up_down.py -p. Defaults to a
+#       weekday-incrementing value so the window widens over the week:
+#       Mon=14, Tue=15, Wed=16, Thu=17, Fri=18, Sat=19, Sun=20.
 #   -f  tickers file, forwarded to market_up_down.py -f (default: tickers.txt)
 set -e
 
@@ -16,7 +18,9 @@ TARGET_DIR=/var/www/html/booths/pages
 WORK_DIR=/home/tshen/agents/blue-sky-stock-market-watch
 LINKS_FILE=/var/www/html/booths/links/blue-sky-stock-market-watch.htm
 
-PERIOD=14
+# `date +%u` is the ISO weekday: 1=Monday .. 7=Sunday, so this gives
+# Mon=14, Tue=15, Wed=16, Thu=17, Fri=18, Sat=19, Sun=20.
+PERIOD=$((13 + $(date +%u)))
 TICKERS_FILE=tickers.txt
 
 while getopts "p:f:" opt; do
