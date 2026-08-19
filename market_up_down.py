@@ -57,35 +57,37 @@ DEFAULT_PERIOD = "1"
 
 # Column order for both the CSV and HTML reports: (field key, HTML header label,
 # whether the column can be sorted in the HTML report, cell type for sorting).
+# A "\n" in the label breaks the HTML header onto a second line so the column
+# doesn't have to stretch to fit the whole phrase on one line.
 # start_date and end_date are the same for every row in a report, so sorting by
 # them is meaningless -- they're the only two columns excluded from sorting.
 REPORT_COLUMNS = [
     ("symbol", "Symbol", True, "text"),
-    ("high_price", "High Price", True, "num"),
-    ("high_when", "High Date/Hour", True, "text"),
-    ("low_price", "Low Price", True, "num"),
-    ("low_when", "Low Date/Hour", True, "text"),
+    ("high_price", "High\nPrice", True, "num"),
+    ("high_when", "High\nDate/Hour", True, "text"),
+    ("low_price", "Low\nPrice", True, "num"),
+    ("low_when", "Low\nDate/Hour", True, "text"),
     ("change", "Change", True, "num"),
-    ("change_median", "Change (Median)", True, "num"),
+    ("change_median", "Change\n(Median)", True, "num"),
     ("change_percent", "Change %", True, "num"),
-    ("last_close", "Last Close", True, "num"),
-    ("last_hour", "Last Hour", True, "num"),
-    ("current_price", "Current Price", True, "num"),
-    ("change_from_last_close", "Change from Last Close", True, "toggle"),
-    ("change_from_last_hour", "Change from Last Hour", True, "toggle"),
-    ("change_pct_from_high", "% From High", True, "num"),
-    ("change_pct_from_low", "% From Low", True, "num"),
-    ("change_median_price", "Median Price", True, "num"),
-    ("change_pct_from_change_median_price", "% From Median", True, "num"),
+    ("last_close", "Last\nClose", True, "num"),
+    ("last_hour", "Last\nHour", True, "num"),
+    ("current_price", "Current\nPrice", True, "num"),
+    ("change_from_last_close", "Change from\nLast Close", True, "toggle"),
+    ("change_from_last_hour", "Change from\nLast Hour", True, "toggle"),
+    ("change_pct_from_high", "% From\nHigh", True, "num"),
+    ("change_pct_from_low", "% From\nLow", True, "num"),
+    ("change_median_price", "Median\nPrice", True, "num"),
+    ("change_pct_from_change_median_price", "% From\nMedian", True, "num"),
     ("change_days", "Days", True, "num"),
-    ("implied_volatility", "Implied Vol %", True, "num"),
-    ("expected_move_percent", "Expected Move %", True, "num"),
-    ("realized_vs_implied", "Realized/Implied", True, "num"),
-    ("realized_volatility", "Realized Vol %", True, "num"),
-    ("period_return_percent", "Period Return %", True, "num"),
-    ("close_in_range_percent", "Close in Range %", True, "num"),
-    ("start_date", "Start Date", False, "text"),
-    ("end_date", "End Date", False, "text"),
+    ("implied_volatility", "Implied\nVol %", True, "num"),
+    ("expected_move_percent", "Expected\nMove %", True, "num"),
+    ("realized_vs_implied", "Realized/\nImplied", True, "num"),
+    ("realized_volatility", "Realized\nVol %", True, "num"),
+    ("period_return_percent", "Period\nReturn %", True, "num"),
+    ("close_in_range_percent", "Close in\nRange %", True, "num"),
+    ("start_date", "Start\nDate", False, "text"),
+    ("end_date", "End\nDate", False, "text"),
 ]
 
 # Columns whose sign carries meaning worth calling out with color (gains in
@@ -571,6 +573,7 @@ REPORT_CSS = """
     padding: 10px 12px;
     text-align: center;
     color: #b7c2d6;
+    line-height: 1.25;
   }
   .sort-btn {
     all: unset;
@@ -580,6 +583,7 @@ REPORT_CSS = """
     padding: 10px 12px;
     cursor: pointer;
     text-align: inherit;
+    line-height: 1.25;
   }
   .sort-btn:hover { background: rgba(255, 255, 255, 0.08); }
   .sort-arrow { display: inline-block; width: 12px; margin-left: 2px; }
@@ -641,6 +645,24 @@ REPORT_CSS = """
 """
 
 
+def format_header_label(label):
+    """Escape a header label and turn its "\\n" marker into a <br> line break."""
+    return "<br>".join(html.escape(part) for part in label.split("\n"))
+
+
+def format_dollar(value):
+    """Render a toggle-column value as a signed dollar amount, e.g. "-$3.00"."""
+    if value is None:
+        return ""
+    sign = "-" if value < 0 else ""
+    return f"{sign}${abs(value):.2f}"
+
+
+def format_percent(value):
+    """Render a toggle-column value as a percent, e.g. "2.86%"."""
+    return "" if value is None else f"{value:.2f}%"
+
+
 def render_footer_html():
     """Footer shared by every report page: created date, publisher link, copyright."""
     today_label = datetime.now().strftime("%B %d, %Y")
@@ -675,10 +697,10 @@ def render_html_report(
             )
             header_cells.append(
                 f'<th data-type="{sort_type}"><button type="button" class="sort-btn">'
-                f'{html.escape(label)}{toggle_html}<span class="sort-arrow"></span></button></th>'
+                f'{format_header_label(label)}{toggle_html}<span class="sort-arrow"></span></button></th>'
             )
         else:
-            header_cells.append(f'<th class="unsortable">{html.escape(label)}</th>')
+            header_cells.append(f'<th class="unsortable">{format_header_label(label)}</th>')
     header_html = "\n          ".join(header_cells)
 
     body_rows = []
@@ -697,10 +719,13 @@ def render_html_report(
                 percent_value = data.get(key + "_percent")
                 dollar_attr = "" if value is None else str(value)
                 percent_attr = "" if percent_value is None else str(percent_value)
+                display_dollar = format_dollar(value)
+                display_percent = format_percent(percent_value)
                 cells.append(
                     f'<td data-toggle-group="{key}" data-dollar="{dollar_attr}" '
-                    f'data-percent="{percent_attr}" data-value="{dollar_attr}"'
-                    f'{css_class}>{html.escape(text)}</td>'
+                    f'data-percent="{percent_attr}" data-display-dollar="{html.escape(display_dollar)}" '
+                    f'data-display-percent="{html.escape(display_percent)}" data-value="{dollar_attr}"'
+                    f'{css_class}>{html.escape(display_dollar)}</td>'
                 )
             elif cell_type == "num":
                 data_value = "" if value is None else str(value)
@@ -762,9 +787,8 @@ def render_html_report(
         ? "$ / <strong>%</strong>"
         : "<strong>&#36;</strong> / %";
       document.querySelectorAll('td[data-toggle-group="' + target + '"]').forEach(function (td) {{
-        var val = showPercent ? td.dataset.percent : td.dataset.dollar;
-        td.dataset.value = val;
-        td.textContent = val;
+        td.dataset.value = showPercent ? td.dataset.percent : td.dataset.dollar;
+        td.textContent = showPercent ? td.dataset.displayPercent : td.dataset.displayDollar;
       }});
     }});
   }});
