@@ -17,11 +17,16 @@
 # Output: config/output/market-up-down-YYYYMMDDHHMM.csv and the same-named .html
 # (a sortable report with the identical data, plus a link to the analysis page).
 # CSV fields: symbol, high price, high date and hour, low price, low date and hour,
-#             current_price (the price at the time the script was run),
 #             change (high - low, signed: positive when the low came first and the
 #             symbol rose, negative when the high came first and the symbol fell),
 #             change_median (change / 2), change_percent (change over the starting
 #             price -- the low for a rise, the high for a fall),
+#             last_close (previous market close), last_hour (price at the most
+#             recent hourly bar), current_price (the price at the time the script
+#             was run), change_from_last_close / change_from_last_close_percent
+#             (current_price vs. last_close, in dollars and percent),
+#             change_from_last_hour / change_from_last_hour_percent (current_price
+#             vs. last_hour, in dollars and percent),
 #             change_pct_from_high (current_price vs. high_price, percent; negative
 #             is a fall from the high, positive a rise above it),
 #             change_pct_from_low (current_price vs. low_price, percent; negative is
@@ -60,10 +65,14 @@ REPORT_COLUMNS = [
     ("high_when", "High Date/Hour", True, "text"),
     ("low_price", "Low Price", True, "num"),
     ("low_when", "Low Date/Hour", True, "text"),
-    ("current_price", "Current Price", True, "num"),
     ("change", "Change", True, "num"),
     ("change_median", "Change (Median)", True, "num"),
     ("change_percent", "Change %", True, "num"),
+    ("last_close", "Last Close", True, "num"),
+    ("last_hour", "Last Hour", True, "num"),
+    ("current_price", "Current Price", True, "num"),
+    ("change_from_last_close", "Change from Last Close", True, "toggle"),
+    ("change_from_last_hour", "Change from Last Hour", True, "toggle"),
     ("change_pct_from_high", "% From High", True, "num"),
     ("change_pct_from_low", "% From Low", True, "num"),
     ("change_median_price", "Median Price", True, "num"),
@@ -85,6 +94,8 @@ SIGNED_COLUMNS = {
     "change",
     "change_median",
     "change_percent",
+    "change_from_last_close",
+    "change_from_last_hour",
     "change_pct_from_high",
     "change_pct_from_low",
     "change_pct_from_change_median_price",
@@ -307,12 +318,18 @@ def get_high_low(ticker, query):
     of the hourly High column; the low point is the min of the hourly Low
     column. Returns a dict of result fields, or None if no data is available.
 
-    `current_price` is the price at the time the script is run. `change` is the
-    high-low spread signed by trend: positive when the low came first and the
-    symbol rose to its high, negative when the high came first and the symbol
-    fell to its low. `change_median` is change / 2. `change_percent` expresses
-    that move against the price it started from -- the low for a rise, the high
-    for a fall. `change_pct_from_high` and `change_pct_from_low` measure
+    `last_close` is the previous market close (Yahoo's `previousClose`);
+    `last_hour` is the close of the most recent hourly bar; `current_price` is
+    the live price at the time the script is run (falling back to `last_hour`
+    if a live quote isn't available). `change_from_last_close` /
+    `change_from_last_close_percent` and `change_from_last_hour` /
+    `change_from_last_hour_percent` measure `current_price` against those two
+    reference points, in dollars and percent. `change` is the high-low spread
+    signed by trend: positive when the low came first and the symbol rose to
+    its high, negative when the high came first and the symbol fell to its
+    low. `change_median` is change / 2. `change_percent` expresses that move
+    against the price it started from -- the low for a rise, the high for a
+    fall. `change_pct_from_high` and `change_pct_from_low` measure
     `current_price` against `high_price` and `low_price`, signed (negative for a
     fall, positive for a rise/recovery). `change_median_price` is the midpoint
     of the low and high, and `change_pct_from_change_median_price` measures
@@ -351,14 +368,32 @@ def get_high_low(ticker, query):
     # Inclusive calendar span, so a move within a single day counts as 1.
     change_days = abs((high_idx.date() - low_idx.date()).days) + 1
 
-    last_close = float(hist['Close'].iloc[-1])
+    last_hour_price = float(hist['Close'].iloc[-1])
 
-    # Live price as of right now; falls back to the last available close if the
-    # live quote can't be fetched.
+    # Live price as of right now; falls back to the last available hourly close
+    # if the live quote can't be fetched.
     try:
         current_price = float(stock.fast_info["lastPrice"])
     except Exception:
-        current_price = last_close
+        current_price = last_hour_price
+
+    # Previous official market close, separate from last_hour_price (which is
+    # just the most recent bar in the requested period).
+    try:
+        last_close = float(stock.fast_info["previousClose"])
+    except Exception:
+        last_close = None
+
+    change_from_last_close = round(current_price - last_close, 2) if last_close is not None else None
+    change_from_last_close_percent = (
+        round((current_price - last_close) / last_close * 100, 2)
+        if last_close else None
+    )
+    change_from_last_hour = round(current_price - last_hour_price, 2)
+    change_from_last_hour_percent = (
+        round((current_price - last_hour_price) / last_hour_price * 100, 2)
+        if last_hour_price else None
+    )
 
     change_median = change / 2
     change_median_price = (float(low_price) + float(high_price)) / 2
@@ -376,7 +411,7 @@ def get_high_low(ticker, query):
     # Options are a separate request and not every symbol has them; a failure
     # here should not cost us the price row.
     try:
-        implied_volatility = get_implied_volatility(stock, last_close)
+        implied_volatility = get_implied_volatility(stock, last_hour_price)
     except Exception:
         implied_volatility = None
 
@@ -392,11 +427,11 @@ def get_high_low(ticker, query):
     realized_volatility = get_realized_volatility(hist)
 
     first_open = float(hist['Open'].iloc[0])
-    period_return_percent = ((last_close - first_open) / first_open * 100) if first_open else None
+    period_return_percent = ((last_hour_price - first_open) / first_open * 100) if first_open else None
 
     # Where the symbol settled inside its own range: 0 at the low, 100 at the high.
     span = float(high_price) - float(low_price)
-    close_in_range_percent = ((last_close - float(low_price)) / span * 100) if span else None
+    close_in_range_percent = ((last_hour_price - float(low_price)) / span * 100) if span else None
 
     return {
         "symbol": ticker,
@@ -404,10 +439,16 @@ def get_high_low(ticker, query):
         "high_when": high_idx.strftime("%Y-%m-%d %H:%M"),
         "low_price": round(float(low_price), 2),
         "low_when": low_idx.strftime("%Y-%m-%d %H:%M"),
-        "current_price": round(current_price, 2),
         "change": round(change, 2),
         "change_median": round(change_median, 2),
         "change_percent": round(change_percent, 2),
+        "last_close": round_or_none(last_close),
+        "last_hour": round(last_hour_price, 2),
+        "current_price": round(current_price, 2),
+        "change_from_last_close": change_from_last_close,
+        "change_from_last_close_percent": change_from_last_close_percent,
+        "change_from_last_hour": change_from_last_hour,
+        "change_from_last_hour_percent": change_from_last_hour_percent,
         "change_pct_from_high": round(change_pct_from_high, 2),
         "change_pct_from_low": round(change_pct_from_low, 2),
         "change_median_price": round(change_median_price, 2),
@@ -542,6 +583,17 @@ REPORT_CSS = """
   }
   .sort-btn:hover { background: rgba(255, 255, 255, 0.08); }
   .sort-arrow { display: inline-block; width: 12px; margin-left: 2px; }
+  .unit-toggle {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .unit-toggle:hover { background: rgba(255, 255, 255, 0.14); }
   tbody td {
     padding: 8px 12px;
     text-align: right;
@@ -615,9 +667,15 @@ def render_html_report(
     header_cells = []
     for key, label, sortable, cell_type in REPORT_COLUMNS:
         if sortable:
+            sort_type = "num" if cell_type == "toggle" else cell_type
+            toggle_html = (
+                f'<span class="unit-toggle" data-target="{key}" data-unit="dollar" '
+                'title="Click to toggle $ / %"><strong>&#36;</strong> / %</span>'
+                if cell_type == "toggle" else ""
+            )
             header_cells.append(
-                f'<th data-type="{cell_type}"><button type="button" class="sort-btn">'
-                f'{html.escape(label)}<span class="sort-arrow"></span></button></th>'
+                f'<th data-type="{sort_type}"><button type="button" class="sort-btn">'
+                f'{html.escape(label)}{toggle_html}<span class="sort-arrow"></span></button></th>'
             )
         else:
             header_cells.append(f'<th class="unsortable">{html.escape(label)}</th>')
@@ -635,7 +693,16 @@ def render_html_report(
             css_class = ""
             if key in SIGNED_COLUMNS and value is not None:
                 css_class = ' class="pos"' if value > 0 else (' class="neg"' if value < 0 else "")
-            if cell_type == "num":
+            if cell_type == "toggle":
+                percent_value = data.get(key + "_percent")
+                dollar_attr = "" if value is None else str(value)
+                percent_attr = "" if percent_value is None else str(percent_value)
+                cells.append(
+                    f'<td data-toggle-group="{key}" data-dollar="{dollar_attr}" '
+                    f'data-percent="{percent_attr}" data-value="{dollar_attr}"'
+                    f'{css_class}>{html.escape(text)}</td>'
+                )
+            elif cell_type == "num":
                 data_value = "" if value is None else str(value)
                 cells.append(f'<td data-value="{data_value}"{css_class}>{html.escape(text)}</td>')
             else:
@@ -685,6 +752,23 @@ def render_html_report(
 
 <script>
 (function () {{
+  document.querySelectorAll(".unit-toggle").forEach(function (toggle) {{
+    toggle.addEventListener("click", function (e) {{
+      e.stopPropagation();
+      var target = toggle.dataset.target;
+      var showPercent = toggle.dataset.unit !== "percent";
+      toggle.dataset.unit = showPercent ? "percent" : "dollar";
+      toggle.innerHTML = showPercent
+        ? "$ / <strong>%</strong>"
+        : "<strong>&#36;</strong> / %";
+      document.querySelectorAll('td[data-toggle-group="' + target + '"]').forEach(function (td) {{
+        var val = showPercent ? td.dataset.percent : td.dataset.dollar;
+        td.dataset.value = val;
+        td.textContent = val;
+      }});
+    }});
+  }});
+
   document.querySelectorAll(".sort-btn").forEach(function (btn) {{
     btn.addEventListener("click", function () {{
       var th = btn.closest("th");
@@ -755,10 +839,16 @@ def main():
         "high_date_hour",
         "low_price",
         "low_date_hour",
-        "current_price",
         "change",
         "change_median",
         "change_percent",
+        "last_close",
+        "last_hour",
+        "current_price",
+        "change_from_last_close",
+        "change_from_last_close_percent",
+        "change_from_last_hour",
+        "change_from_last_hour_percent",
         "change_pct_from_high",
         "change_pct_from_low",
         "change_median_price",
@@ -797,10 +887,16 @@ def main():
                 row["high_when"],
                 row["low_price"],
                 row["low_when"],
-                row["current_price"],
                 row["change"],
                 row["change_median"],
                 row["change_percent"],
+                csv_value(row["last_close"]),
+                row["last_hour"],
+                row["current_price"],
+                csv_value(row["change_from_last_close"]),
+                csv_value(row["change_from_last_close_percent"]),
+                row["change_from_last_hour"],
+                csv_value(row["change_from_last_hour_percent"]),
                 row["change_pct_from_high"],
                 row["change_pct_from_low"],
                 row["change_median_price"],
@@ -826,9 +922,16 @@ def main():
                 f"change {row['change']} ({row['change_percent']}%) over {row['change_days']}d"
             )
             print(
-                f"      current {row['current_price']} "
-                f"(from high {row['change_pct_from_high']}%, from low {row['change_pct_from_low']}%, "
-                f"from median {row['change_pct_from_change_median_price']}%)"
+                f"      last close {csv_value(row['last_close'])}, last hour {row['last_hour']}, "
+                f"current {row['current_price']} "
+                f"(from last close {csv_value(row['change_from_last_close'])} "
+                f"({csv_value(row['change_from_last_close_percent'])}%), "
+                f"from last hour {row['change_from_last_hour']} "
+                f"({csv_value(row['change_from_last_hour_percent'])}%))"
+            )
+            print(
+                f"      from high {row['change_pct_from_high']}%, from low {row['change_pct_from_low']}%, "
+                f"from median {row['change_pct_from_change_median_price']}%"
             )
             print(
                 f"      IV {iv_desc}, RV {row['realized_volatility']}%, "
