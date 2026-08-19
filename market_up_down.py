@@ -569,6 +569,7 @@ REPORT_CSS = """
     z-index: 1;
   }
   thead th:first-child { text-align: left; }
+  thead th.two-line { text-align: center; }
   thead th.unsortable {
     padding: 10px 12px;
     text-align: center;
@@ -688,6 +689,7 @@ def render_html_report(
     """
     header_cells = []
     for key, label, sortable, cell_type in REPORT_COLUMNS:
+        line_class = " two-line" if "\n" in label else ""
         if sortable:
             sort_type = "num" if cell_type == "toggle" else cell_type
             toggle_html = (
@@ -696,11 +698,11 @@ def render_html_report(
                 if cell_type == "toggle" else ""
             )
             header_cells.append(
-                f'<th data-type="{sort_type}"><button type="button" class="sort-btn">'
+                f'<th data-type="{sort_type}" class="{line_class.strip()}"><button type="button" class="sort-btn">'
                 f'{format_header_label(label)}{toggle_html}<span class="sort-arrow"></span></button></th>'
             )
         else:
-            header_cells.append(f'<th class="unsortable">{format_header_label(label)}</th>')
+            header_cells.append(f'<th class="unsortable{line_class}">{format_header_label(label)}</th>')
     header_html = "\n          ".join(header_cells)
 
     body_rows = []
