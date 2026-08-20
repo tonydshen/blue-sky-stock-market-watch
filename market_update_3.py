@@ -203,8 +203,8 @@ def main():
     print(f"[{datetime.now()}] Setup complete. Using Model: {args.model} | Period: {period_input} | Input Files: {args.input}")
 
     # --- EXECUTION ---
-    base_prompt = read_prompt(os.getenv("PROMPT_PATH"))
-    tickers = read_tickers(os.getenv("TICKERS_PATH"))
+    base_prompt = read_prompt(os.getenv("PROMPT_FILE"))
+    tickers = read_tickers(os.getenv("TICKERS_FILE"))
     data = get_market_data(tickers, period_input)
     
     # Process Supplementary Files

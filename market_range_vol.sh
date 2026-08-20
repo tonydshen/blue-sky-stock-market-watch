@@ -33,8 +33,21 @@ done
 
 cd "$WORK_DIR"
 uv run market_up_down.py -p "$PERIOD" -f "$TICKERS_FILE"
-uv run market_analysis.py --model gemini-2.5-pro
-uv run market_analysis.py --model claude-opus-5
+
+# When the tickers file has a sector title (see read_tickers in
+# market_up_down.py), market_up_down.py writes a sector-focused macro prompt
+# and drops its file name into this pointer file (cleared every run so a
+# stale value never leaks into a run that didn't generate one). Forward it to
+# both analysis passes so their "Broader Market Context" section is written
+# through that sector's lens instead of the generic default.
+SECTOR_PROMPT_POINTER="$SOURCE_DIR/.last-sector-prompt"
+PROMPT_ARGS=()
+if [ -s "$SECTOR_PROMPT_POINTER" ]; then
+    PROMPT_ARGS=(--prompt-file "$(cat "$SECTOR_PROMPT_POINTER")")
+fi
+
+uv run market_analysis.py --model gemini-2.5-pro "${PROMPT_ARGS[@]}"
+uv run market_analysis.py --model claude-opus-5 "${PROMPT_ARGS[@]}"
 # copy html pages from source to target
 cp "$SOURCE_DIR"/*.html "$TARGET_DIR"
 

@@ -11,7 +11,7 @@
 #     (a file name only, no path; read from config/tickers)
 #
 # When -p is omitted the last 1 day is used; when -f is omitted the default file
-# from TICKERS_PATH (config/tickers/tickers.txt) is used. With neither given:
+# from TICKERS_FILE (config/tickers/tickers.txt) is used. With neither given:
 #   uv run market_up_down.py        # 1 day of data for config/tickers/tickers.txt
 #
 # Output: config/output/market-up-down-YYYYMMDDHHMM.csv and the same-named .html
@@ -121,7 +121,7 @@ USAGE = (
     f"                       Defaults to {DEFAULT_PERIOD} day.\n"
     "  -f, --file           optional; name of a tickers file in config/tickers,\n"
     "                       e.g. tickers-sp500-it.txt (file name only, no path).\n"
-    "                       Defaults to the file named by TICKERS_PATH.\n"
+    "                       Defaults to the file named by TICKERS_FILE.\n"
 )
 
 
@@ -144,28 +144,100 @@ def csv_value(value):
 
 
 def read_tickers(tickers_path):
+    """Read a tickers file, returning (symbols, sector_title).
+
+    Each non-blank line is either a bare symbol ("AAPL") or a
+    "SYMBOL|Company Name" pair -- only the part before "|" is used as the
+    symbol. A file may optionally start with a plain title line (no "|"),
+    e.g. "Health Sector", naming the sector it covers; when present it's
+    returned as sector_title and excluded from the symbol list, otherwise
+    sector_title is None.
+    """
     with open(get_absolute_path(tickers_path), "r") as f:
-        return [line.strip() for line in f.readlines() if line.strip()]
+        lines = [line.strip() for line in f.readlines() if line.strip()]
+
+    # A title line (e.g. "Health Sector") never contains "|" and doesn't look
+    # like a bare ticker symbol (which is all-uppercase with no spaces, e.g.
+    # "AAPL" or "BRK.B") -- that's what distinguishes it from the first
+    # symbol of a plain tickers file.
+    sector_title = None
+    if lines and "|" not in lines[0] and not (lines[0].isupper() and " " not in lines[0]):
+        sector_title = lines[0]
+        lines = lines[1:]
+
+    symbols = [line.split("|", 1)[0].strip() for line in lines]
+    return symbols, sector_title
 
 
 def resolve_tickers_path(file_name):
     """Return the full path of the tickers file to read.
 
-    The tickers folder is the one holding the file named by TICKERS_PATH
-    (config/tickers). `file_name` is a bare file name within that folder; when
-    it is None the TICKERS_PATH file itself (tickers.txt) is used.
+    The tickers folder is TICKERS_PATH (config/tickers). `file_name` is a bare
+    file name within that folder; when it is None the TICKERS_FILE default
+    (tickers.txt) is used.
     """
-    default_path = get_absolute_path(os.getenv("TICKERS_PATH"))
     if file_name is None:
-        return default_path
+        return get_absolute_path(os.getenv("TICKERS_FILE"))
 
     if os.path.basename(file_name) != file_name:
         usage_error(f"'{file_name}' must be a file name only, without a path")
 
-    path = os.path.join(os.path.dirname(default_path), file_name)
+    path = os.path.join(get_absolute_path(os.getenv("TICKERS_PATH")), file_name)
     if not os.path.isfile(path):
         usage_error(f"tickers file not found: {path}")
     return path
+
+
+def build_sector_prompt_content(sector_title):
+    """Macro-context guidance for a sector-focused tickers file (see
+    read_tickers). Written to PROMPT_PATH and handed to market_analysis.py via
+    --prompt-file so its 'Broader Market Context' section is written through
+    this sector's lens instead of the generic macro/sector-rotation prompt."""
+    return (
+        f"Focus this analysis on the {sector_title}. Every symbol in the report's data is a "
+        f"{sector_title} name, so ground the entire 'Broader Market Context' section in that "
+        f"lens rather than the market as a whole. Specifically address:\n\n"
+        f"1. Differential behavior: how these {sector_title} names moved differently from each "
+        f"other and from the broader market in this period -- which sub-groups within the sector "
+        f"(e.g. large-cap leaders vs. smaller or more volatile names, or distinct business lines "
+        f"within the sector) pulled apart, and by how much.\n\n"
+        f"2. Rotation: whether the pattern of gains and losses looks like sector rotation -- money "
+        f"moving into or out of the {sector_title} relative to other sectors (e.g. a defensive "
+        f"rotation into it during a risk-off period, or a rotation out of it into growth or cyclical "
+        f"names during a risk-on period) -- versus moves that look stock-specific or idiosyncratic "
+        f"(earnings, trial or regulatory news, M&A).\n\n"
+        f"3. Current events: any current, plausible {sector_title}-relevant developments -- policy "
+        f"or regulatory shifts, major earnings or product/trial news, M&A activity, or macro factors "
+        f"that disproportionately affect this sector -- that could plausibly relate to the volatility "
+        f"seen in the data above. Use hedged language ('likely reflects', 'consistent with') rather "
+        f"than asserting that specific unverified news events occurred.\n\n"
+        f"Since this covers three distinct angles instead of one, let the 'Broader Market Context' "
+        f"section run longer than usual -- roughly 250-400 words -- so each angle gets a real "
+        f"paragraph rather than a single sentence."
+    )
+
+
+def write_sector_prompt_file(sector_title, timestamp):
+    """Write a sector-focused macro-context prompt to PROMPT_PATH and return
+    its file name (not full path), or None if PROMPT_PATH isn't configured."""
+    prompt_dir = os.getenv("PROMPT_PATH")
+    if not prompt_dir:
+        return None
+    prompt_dir = get_absolute_path(prompt_dir)
+    filename = f"Market_{'_'.join(sector_title.split())}_Prompt_{timestamp}.md"
+    with open(os.path.join(prompt_dir, filename), "w") as f:
+        f.write(build_sector_prompt_content(sector_title))
+    return filename
+
+
+def write_sector_prompt_pointer(output_dir, sector_prompt_filename):
+    """Write (or clear) the small pointer file market_range_vol.sh reads to
+    hand a sector-focused prompt file off to market_analysis.py. Always
+    overwritten -- even to empty -- so a stale value from a previous run never
+    leaks into a run that didn't generate one."""
+    with open(os.path.join(output_dir, ".last-sector-prompt"), "w") as f:
+        if sector_prompt_filename:
+            f.write(sector_prompt_filename)
 
 
 def usage_error(message):
@@ -679,14 +751,22 @@ def render_footer_html():
 
 def render_html_report(
     rows, start_label, end_label, generated_at, symbol_count, tickers_name,
-    period_desc, analysis_href,
+    period_desc, analysis_href, sector_title=None,
 ):
     """Render the sortable HTML report as a single self-contained page.
 
     `rows` are the per-symbol dicts returned by get_high_low, in the order they
     should appear. Every CSV field is shown; start_date/end_date are filled in
     from start_label/end_label since they aren't part of the row dict.
+
+    `sector_title`, when the tickers file named one (see read_tickers), is
+    worked into the report title, e.g. "Blue Sky Health Sector Stock
+    Volatility Report".
     """
+    report_title = (
+        f"Blue Sky {sector_title} Stock Volatility Report" if sector_title
+        else "Blue Sky Stock Volatility Report"
+    )
     header_cells = []
     for key, label, sortable, cell_type in REPORT_COLUMNS:
         line_class = " two-line" if "\n" in label else ""
@@ -742,13 +822,13 @@ def render_html_report(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Blue Sky Stock Volatility Report</title>
+<title>{html.escape(report_title)}</title>
 <style>{REPORT_CSS}</style>
 </head>
 <body>
 <div class="wrap">
   <header class="report-header">
-    <h1>Blue Sky Stock Volatility Report</h1>
+    <h1>{html.escape(report_title)}</h1>
     <p class="subtitle">{html.escape(start_label)} &ndash; {html.escape(end_label)}</p>
     <p class="meta">Generated {html.escape(generated_at)} &middot; {symbol_count} symbols from {html.escape(tickers_name)} &middot; {html.escape(period_desc)}</p>
   </header>
@@ -843,7 +923,7 @@ def render_html_report(
 
 def main():
     query, start_date, end_date, tickers_path = parse_args(sys.argv)
-    tickers = read_tickers(tickers_path)
+    tickers, sector_title = read_tickers(tickers_path)
 
     start_label = start_date.strftime("%m/%d/%Y")
     end_label = end_date.strftime("%m/%d/%Y")
@@ -858,6 +938,14 @@ def main():
     output_path = os.path.join(output_dir, f"market-up-down-{timestamp}.csv")
     html_output_path = os.path.join(output_dir, f"market-up-down-{timestamp}.html")
     analysis_filename = f"market-analysis-{timestamp}.html"
+
+    sector_prompt_filename = None
+    if sector_title:
+        prompt_timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        sector_prompt_filename = write_sector_prompt_file(sector_title, prompt_timestamp)
+        if sector_prompt_filename:
+            print(f"[{datetime.now()}] Wrote sector prompt: {sector_prompt_filename}")
+    write_sector_prompt_pointer(output_dir, sector_prompt_filename)
 
     header = [
         "symbol",
@@ -974,6 +1062,7 @@ def main():
         tickers_name=os.path.basename(tickers_path),
         period_desc=period_desc,
         analysis_href=analysis_filename,
+        sector_title=sector_title,
     )
     with open(html_output_path, "w") as f:
         f.write(html_report)

@@ -21,7 +21,7 @@
 #                   the most recent report found there.
 #   --prompt-file   optional; name of a macro-context prompt file in
 #                   config/prompts (file name only, no path). Defaults to
-#                   PROMPT_PATH from .env if set, otherwise a built-in
+#                   PROMPT_FILE from .env if set, otherwise a built-in
 #                   generic macro/sector-rotation prompt.
 #
 # Output: config/output/market-analysis-YYYYMMDDHHMM.html -- same timestamp
@@ -46,6 +46,10 @@ load_dotenv()
 # Claude's own generation is a short, straightforward writing task (not
 # multi-step reasoning), so no thinking/effort configuration is needed here.
 ANTHROPIC_MAX_TOKENS = 4096
+# Used instead of ANTHROPIC_MAX_TOKENS when build_prompt's extended=True widens
+# the 'Broader Market Context' word budget (e.g. for a sector-focused prompt) --
+# only a cap, so it costs nothing unless the model actually writes that much.
+ANTHROPIC_MAX_TOKENS_EXTENDED = 8192
 
 NUMERIC_FIELDS = {
     "high_price", "low_price", "current_price", "change", "change_median",
@@ -70,7 +74,7 @@ USAGE = (
     "  -t, --timestamp optional; YYYYMMDDHHMM of an existing market-up-down-*.csv report\n"
     "                  in OUTPUT_PATH. Defaults to the most recent report found.\n"
     "  --prompt-file   optional; name of a macro-context prompt file in config/prompts\n"
-    "                  (file name only, no path). Defaults to PROMPT_PATH from .env, or a\n"
+    "                  (file name only, no path). Defaults to PROMPT_FILE from .env, or a\n"
     "                  built-in generic prompt.\n"
 )
 
@@ -268,7 +272,7 @@ def resolve_macro_prompt(prompt_file_arg):
         with open(path) as f:
             return f.read()
 
-    env_path = os.getenv("PROMPT_PATH")
+    env_path = os.getenv("PROMPT_FILE")
     if env_path:
         resolved = get_absolute_path(env_path)
         if os.path.isfile(resolved):
@@ -278,7 +282,12 @@ def resolve_macro_prompt(prompt_file_arg):
     return DEFAULT_MACRO_PROMPT
 
 
-def build_prompt(data_table_text, highlights_text, macro_prompt_text, start_label, end_label, symbol_count):
+def build_prompt(data_table_text, highlights_text, macro_prompt_text, start_label, end_label, symbol_count, extended=False):
+    """`extended` widens the 'Broader Market Context' word budget for prompts
+    that ask for more than the generic single-paragraph macro take (e.g. a
+    sector-focused prompt covering differential behavior, rotation, and
+    current events -- see market_up_down.py's build_sector_prompt_content)."""
+    context_word_range = "roughly 250-400 words" if extended else "roughly 120-200 words"
     return (
         f"Here is the exact per-symbol volatility data for a report covering {start_label} through "
         f"{end_label} for {symbol_count} symbols (sorted by change % descending):\n{data_table_text}\n\n"
@@ -291,13 +300,12 @@ def build_prompt(data_table_text, highlights_text, macro_prompt_text, start_labe
         f"2. In 'Notable Movers & Volatility', analyze ONLY the data given above: the biggest movers, "
         f"where implied volatility over- or under-priced the actual move, and where symbols closed "
         f"within their range. Do not invent news, earnings, or other explanations not derivable from "
-        f"these numbers.\n"
-        f"3. In 'Broader Market Context', add brief macro/sector context that could plausibly relate to "
+        f"these numbers. Keep this section to roughly 120-200 words.\n"
+        f"3. In 'Broader Market Context', add macro/sector context that could plausibly relate to "
         f"the kind of volatility seen in this data, using the guidance below. Use general, hedged "
         f"language (e.g. 'likely reflects', 'consistent with') rather than asserting specific news "
-        f"events occurred.\n"
-        f"4. Keep each section to roughly 120-200 words, in short paragraphs and, where helpful, a "
-        f"few bullet points.\n"
+        f"events occurred. Keep this section to {context_word_range}, in short paragraphs and, where "
+        f"helpful, a few bullet points.\n"
         f"---\n"
         f"MACRO CONTEXT GUIDANCE:\n{macro_prompt_text}\n"
     )
@@ -440,11 +448,11 @@ def validate_model(client, provider, model):
         print("Proceeding with requested model anyway...")
 
 
-def generate_narrative(client, provider, model, prompt_text):
+def generate_narrative(client, provider, model, prompt_text, extended=False):
     if provider == "anthropic":
         response = client.messages.create(
             model=model,
-            max_tokens=ANTHROPIC_MAX_TOKENS,
+            max_tokens=ANTHROPIC_MAX_TOKENS_EXTENDED if extended else ANTHROPIC_MAX_TOKENS,
             messages=[{"role": "user", "content": prompt_text}],
         )
         return "".join(block.text for block in response.content if block.type == "text")
@@ -492,7 +500,14 @@ def main():
     data_table_text = build_data_table_text(rows)
     highlights_text = build_highlights_text(highlights)
     macro_prompt_text = resolve_macro_prompt(args.prompt_file)
-    prompt = build_prompt(data_table_text, highlights_text, macro_prompt_text, start_label, end_label, len(rows))
+    # An explicit --prompt-file (e.g. the sector-focused prompt market_up_down.py
+    # generates for a tickers file with a title line) asks for more than the
+    # generic single-paragraph macro take, so give it a wider word/token budget.
+    extended = args.prompt_file is not None
+    prompt = build_prompt(
+        data_table_text, highlights_text, macro_prompt_text, start_label, end_label, len(rows),
+        extended=extended,
+    )
 
     provider = detect_provider(args.model)
     client = build_client(provider)
@@ -500,7 +515,7 @@ def main():
 
     print(f"[{datetime.now()}] Analyzing {len(rows)} symbols from {os.path.basename(csv_path)} with {args.model} ({provider})...")
     try:
-        narrative = generate_narrative(client, provider, args.model, prompt)
+        narrative = generate_narrative(client, provider, args.model, prompt, extended=extended)
     except Exception as e:
         print(f"Error: {provider} request failed: {e}", file=sys.stderr)
         sys.exit(1)
