@@ -359,7 +359,7 @@ def slugify_model(model):
     return re.sub(r"[^A-Za-z0-9._-]+", "-", model).strip("-")
 
 
-def render_analysis_html(highlights, prose_html, start_label, end_label, symbol_count, main_report_href, generated_at, model):
+def render_analysis_html(highlights, prose_html, start_label, end_label, symbol_count, main_report_href, generated_at, model, report_title="Blue Sky Stock Volatility Report"):
     cards = []
     for h in highlights:
         css_class = " pos" if h["sign"] > 0 else (" neg" if h["sign"] < 0 else "")
@@ -378,7 +378,7 @@ def render_analysis_html(highlights, prose_html, start_label, end_label, symbol_
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Blue Sky Stock Volatility Report &mdash; Analysis</title>
+<title>{html.escape(report_title)} &mdash; Analysis</title>
 <style>{REPORT_CSS}{ANALYSIS_CSS}</style>
 </head>
 <body>
@@ -386,7 +386,7 @@ def render_analysis_html(highlights, prose_html, start_label, end_label, symbol_
   <div class="back-link"><a href="{html.escape(main_report_href)}">&larr; Back to full report</a></div>
 
   <header class="report-header">
-    <h1>Blue Sky Stock Volatility Report</h1>
+    <h1>{html.escape(report_title)}</h1>
     <p class="subtitle">Analysis &middot; {html.escape(start_label)} &ndash; {html.escape(end_label)}</p>
     <p class="meta">Generated {html.escape(generated_at)} &middot; {symbol_count} symbols &middot; {html.escape(model)}</p>
   </header>
@@ -482,6 +482,17 @@ def main():
         usage_error(f"report not found: {csv_path}")
 
     main_report_html = f"market-up-down-{timestamp}.html"
+    # market_up_down.py drops the sector title here (see
+    # write_sector_title_sidecar) when the tickers file had one, keyed by the
+    # same timestamp as the report itself.
+    sector_title_path = os.path.join(output_dir, f"market-up-down-{timestamp}.sector-title.txt")
+    report_title = "Blue Sky Stock Volatility Report"
+    if os.path.isfile(sector_title_path):
+        with open(sector_title_path) as f:
+            sector_title = f.read().strip()
+        if sector_title:
+            report_title = f"Blue Sky {sector_title} Stock Volatility Report"
+
     model_slug = slugify_model(args.model)
     analysis_html_path = os.path.join(output_dir, f"market-analysis-{timestamp}-{model_slug}.html")
     # The main report's "read report analysis" link always points at this
@@ -531,6 +542,7 @@ def main():
         main_report_href=main_report_html,
         generated_at=datetime.now().strftime("%B %d, %Y %I:%M %p"),
         model=args.model,
+        report_title=report_title,
     )
     with open(analysis_html_path, "w") as f:
         f.write(html_report)

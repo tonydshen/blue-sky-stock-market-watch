@@ -230,6 +230,16 @@ def write_sector_prompt_file(sector_title, timestamp):
     return filename
 
 
+def write_sector_title_sidecar(output_dir, timestamp, sector_title):
+    """Write the sector title next to this run's CSV/HTML report, keyed by the
+    same timestamp, so market_analysis.py can pick it up for its own report
+    title (e.g. "Blue Sky Health Sector Stock Volatility Report") without
+    depending on run order the way the prompt-file pointer does."""
+    path = os.path.join(output_dir, f"market-up-down-{timestamp}.sector-title.txt")
+    with open(path, "w") as f:
+        f.write(sector_title)
+
+
 def write_sector_prompt_pointer(output_dir, sector_prompt_filename):
     """Write (or clear) the small pointer file market_range_vol.sh reads to
     hand a sector-focused prompt file off to market_analysis.py. Always
@@ -941,6 +951,7 @@ def main():
 
     sector_prompt_filename = None
     if sector_title:
+        write_sector_title_sidecar(output_dir, timestamp, sector_title)
         prompt_timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         sector_prompt_filename = write_sector_prompt_file(sector_title, prompt_timestamp)
         if sector_prompt_filename:
