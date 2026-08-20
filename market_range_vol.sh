@@ -84,7 +84,18 @@ DAY=${TIMESTAMP:6:2}
 HOUR=${TIMESTAMP:8:2}
 MINUTE=${TIMESTAMP:10:2}
 LINK_DATE=$(date -d "${YEAR}-${MONTH}-${DAY} ${HOUR}:${MINUTE}" +"%H:%M, %B %-d, %Y")
-NEW_LINK_ROW="$(printf '\t    ')<tr><td><a href=\"/booths/pages/market-up-down-${TIMESTAMP}.html\">US Stock Market Volatility Report, ${LINK_DATE}</a></td></tr>"
+
+# market_up_down.py drops the tickers file's sector title (see
+# write_sector_title_sidecar) here, keyed by this run's timestamp, when the
+# tickers file had one -- e.g. "Energy Sector" for tickers-energy.txt. Work it
+# into the link text the same way it's worked into the report titles.
+LINK_LABEL="US Stock Market Volatility Report"
+SECTOR_TITLE_FILE="$SOURCE_DIR/market-up-down-${TIMESTAMP}.sector-title.txt"
+if [ -s "$SECTOR_TITLE_FILE" ]; then
+    LINK_LABEL="US Stock Market $(cat "$SECTOR_TITLE_FILE") Volatility Report"
+fi
+
+NEW_LINK_ROW="$(printf '\t    ')<tr><td><a href=\"/booths/pages/market-up-down-${TIMESTAMP}.html\">${LINK_LABEL}, ${LINK_DATE}</a></td></tr>"
 
 # insert the new row right after the header row that closes with </tr>,
 # i.e. above whatever links are already there
