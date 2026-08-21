@@ -631,7 +631,16 @@ REPORT_CSS = """
     box-shadow: 0 1px 3px rgba(16, 35, 63, 0.06);
   }
   .table-scroll {
-    overflow-x: auto;
+    /* Both axes are handled by this one scroll container (not split
+       between it and an ancestor) so thead's `position: sticky` below
+       sticks to *this* scrollport. An ancestor with any non-visible
+       overflow -- even overflow-x: auto alone, since the browser then
+       forces the other axis to compute as auto too -- would otherwise
+       become the sticky containing block instead of the viewport, and
+       since that ancestor never scrolls on its own, the header would
+       silently fail to stick. */
+    overflow: auto;
+    max-height: 75vh;
   }
   table {
     border-collapse: collapse;

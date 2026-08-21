@@ -5,11 +5,14 @@
 # output where the web server serves it, and adds a link to the new report
 # at the top of the site's links page.
 #
-# Usage: market_range_vol.sh [-p <period>] [-f <tickers file>]
+# Usage: market_range_vol.sh [-p <period>] [-f <tickers file>] [-l <tickers list file>]
 #   -p  period, forwarded to market_up_down.py -p. Defaults to a
 #       weekday-incrementing value so the window widens over the week:
 #       Mon=14, Tue=15, Wed=16, Thu=17, Fri=18, Sat=19, Sun=20.
 #   -f  tickers file, forwarded to market_up_down.py -f (default: tickers.txt)
+#   -l  tickers list file: a text file with one tickers file name per line
+#       (e.g. tickers-ai.txt, tickers-energy.txt, ...). The full pipeline
+#       runs once per line. Mutually exclusive with -f.
 set -e
 
 # variables
@@ -22,16 +25,41 @@ LINKS_FILE=/var/www/html/booths/links/blue-sky-stock-market-watch.htm
 # Mon=14, Tue=15, Wed=16, Thu=17, Fri=18, Sat=19, Sun=20.
 PERIOD=$((13 + $(date +%u)))
 TICKERS_FILE=tickers.txt
+TICKERS_LIST_FILE=""
+F_GIVEN=0
 
-while getopts "p:f:" opt; do
+while getopts "p:f:l:" opt; do
     case "$opt" in
         p) PERIOD="$OPTARG" ;;
-        f) TICKERS_FILE="$OPTARG" ;;
-        *) echo "Usage: $0 [-p <period>] [-f <tickers file>]" >&2; exit 2 ;;
+        f) TICKERS_FILE="$OPTARG"; F_GIVEN=1 ;;
+        l) TICKERS_LIST_FILE="$OPTARG" ;;
+        *) echo "Usage: $0 [-p <period>] [-f <tickers file>] [-l <tickers list file>]" >&2; exit 2 ;;
     esac
 done
 
+if [ -n "$TICKERS_LIST_FILE" ] && [ "$F_GIVEN" -eq 1 ]; then
+    echo "Error: -f and -l are mutually exclusive" >&2
+    exit 2
+fi
+
 cd "$WORK_DIR"
+
+# -l follows the same convention as -f: a bare file name resolves against the
+# tickers config directory (matches TICKERS_PATH in .env), or an explicit
+# relative/absolute path is used as given.
+TICKERS_DIR="$WORK_DIR/config/tickers"
+if [ -n "$TICKERS_LIST_FILE" ]; then
+    if [ ! -f "$TICKERS_LIST_FILE" ] && [ -f "$TICKERS_DIR/$TICKERS_LIST_FILE" ]; then
+        TICKERS_LIST_FILE="$TICKERS_DIR/$TICKERS_LIST_FILE"
+    fi
+    if [ ! -f "$TICKERS_LIST_FILE" ]; then
+        echo "Error: tickers list file not found: $TICKERS_LIST_FILE" >&2
+        exit 1
+    fi
+fi
+
+run_pipeline() {
+local TICKERS_FILE="$1"
 uv run market_up_down.py -p "$PERIOD" -f "$TICKERS_FILE"
 
 # When the tickers file has a sector title (see read_tickers in
@@ -104,3 +132,15 @@ awk -v newrow="$NEW_LINK_ROW" '
     /<th align="left">Stock Market Volat.*ity Reports<\/th>/ { in_header = 1 }
     in_header && /<\/tr>/ && !inserted { print newrow; inserted = 1; in_header = 0 }
 ' "$LINKS_FILE" > "$LINKS_FILE.tmp" && mv "$LINKS_FILE.tmp" "$LINKS_FILE"
+}
+
+if [ -n "$TICKERS_LIST_FILE" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+        # skip blank lines and comments
+        [ -z "$line" ] && continue
+        case "$line" in \#*) continue ;; esac
+        run_pipeline "$line"
+    done < "$TICKERS_LIST_FILE"
+else
+    run_pipeline "$TICKERS_FILE"
+fi

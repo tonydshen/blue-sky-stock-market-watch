@@ -1,0 +1,25 @@
+AI Centric Sector
+AAPL|Apple
+AMD|Advanced Micro Devices
+AMZN|Amazon
+ASML|ASML
+AVGO|Broadcom
+CSCO|CISCO
+DELL|Dell Computers
+GOOGL|Google
+HPE|HPE
+INTC|Intel Inc
+LNVGY|Leveno
+META|META
+MSFT|Microsoft
+MU|Micron Technology
+NTAP|Net App
+NVDA|NVIDIA
+SKHY|SK Hynix
+SMCI|Super Micro Conputers
+SNDK|San Disk
+SPCX|SpaceX
+STX|Seagate
+TSLA|Tesla
+TSM|TSM
+WDC|Western Digital
