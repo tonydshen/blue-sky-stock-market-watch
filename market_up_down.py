@@ -1,12 +1,16 @@
 # market_up_down.py
-# Reads live Yahoo Finance hourly data for the symbols in tickers.txt and, for a
-# user-defined period, finds each symbol's highest and lowest intraday price
+# Reads live Yahoo Finance hourly data for the symbols in a tickers file and, for
+# a user-defined period, finds each symbol's highest and lowest intraday price
 # points (by hour) and writes them to a timestamped CSV.
 #
 # The period can be given two ways:
 #   - Last N days:      uv run market_up_down.py 20
 #   - Explicit range:   uv run market_up_down.py 20260629-20260711
 #     (June 29, 2026 through July 11, 2026, both inclusive)
+#
+# An optional second argument overrides the default tickers file (TICKERS_PATH
+# in .env) with another file in the same config/tickers/ directory:
+#   - uv run market_up_down.py 20 tickers-energy.txt
 #
 # Output: config/output/market-up-down-YYYYMMDDHHMM.csv
 # CSV fields: symbol, high price, high date and hour, low price, low date and hour, change (high - low)
@@ -20,11 +24,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 USAGE = (
-    "Usage: uv run market_up_down.py <period>\n"
+    "Usage: uv run market_up_down.py <period> [<tickers>]\n"
     "  <period> is either:\n"
     "    N                    number of most recent days, e.g. 20\n"
     "    YYYYMMDD-YYYYMMDD    an explicit start-end date range (both inclusive),\n"
     "                         e.g. 20260629-20260711\n"
+    "  <tickers> is optional:\n"
+    "    tickers file name under the same directory as TICKERS_PATH in .env,\n"
+    "    e.g. tickers-energy.txt (default: the file named by TICKERS_PATH)\n"
 )
 
 
@@ -48,8 +55,8 @@ def usage_error(message):
     sys.exit(2)
 
 
-def parse_period(argv):
-    """Parse the period argument.
+def parse_period(arg):
+    """Parse the period argument string.
 
     Returns a tuple (query, start_date, end_date) where `query` is the dict
     passed to yfinance's history() -- either {"period": "20d"} for a
@@ -57,12 +64,9 @@ def parse_period(argv):
     range -- and start_date/end_date are the inclusive datetime bounds of the
     requested period (used for the CSV columns).
 
-    Exits with a usage message if the argument is missing or malformed.
+    Exits with a usage message if the argument is malformed.
     """
-    if len(argv) != 2:
-        usage_error("exactly one period argument is required")
-
-    arg = argv[1].strip()
+    arg = arg.strip()
 
     # Date range: YYYYMMDD-YYYYMMDD
     if "-" in arg:
@@ -94,6 +98,25 @@ def parse_period(argv):
     return {"period": f"{days}d"}, start, end
 
 
+def resolve_tickers_path(tickers_arg=None):
+    """Resolve the tickers file path.
+
+    Default is TICKERS_PATH from .env. If `tickers_arg` is given (e.g.
+    "tickers-energy.txt"), use that file name under the same directory as
+    TICKERS_PATH (config/tickers/).
+    """
+    default = os.getenv("TICKERS_PATH")
+    if not default:
+        usage_error("TICKERS_PATH is not set in .env")
+    if not tickers_arg:
+        return default
+    # Keep the user-supplied name a simple file name (no path components).
+    name = os.path.basename(tickers_arg.strip())
+    if not name:
+        usage_error("tickers file name must not be empty")
+    return os.path.join(os.path.dirname(default), name)
+
+
 def get_high_low(ticker, query):
     """Return the highest and lowest hourly price points for a ticker.
 
@@ -123,8 +146,16 @@ def get_high_low(ticker, query):
 
 
 def main():
-    query, start_date, end_date = parse_period(sys.argv)
-    tickers = read_tickers(os.getenv("TICKERS_PATH"))
+    if len(sys.argv) < 2 or len(sys.argv) > 3:
+        usage_error("<period> is required; optional <tickers> file name may follow")
+
+    query, start_date, end_date = parse_period(sys.argv[1])
+    tickers_arg = sys.argv[2] if len(sys.argv) == 3 else None
+    tickers_path = resolve_tickers_path(tickers_arg)
+    resolved_tickers = get_absolute_path(tickers_path)
+    if not os.path.isfile(resolved_tickers):
+        usage_error(f"tickers file not found: {resolved_tickers}")
+    tickers = read_tickers(tickers_path)
 
     start_label = start_date.strftime("%m/%d/%Y")
     end_label = end_date.strftime("%m/%d/%Y")
@@ -149,7 +180,10 @@ def main():
         "end_date",
     ]
 
-    print(f"[{datetime.now()}] Fetching hourly data ({period_desc}) for {len(tickers)} symbols...")
+    print(
+        f"[{datetime.now()}] Fetching hourly data ({period_desc}) for "
+        f"{len(tickers)} symbols from {resolved_tickers}..."
+    )
     with open(output_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(header)
