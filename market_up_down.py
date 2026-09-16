@@ -10,14 +10,6 @@
 #   - Tickers file:     uv run market_up_down.py -f tickers-sp500-it.txt
 #     (a file name only, no path; read from config/tickers)
 #
-<<<<<<< HEAD
-# An optional second argument overrides the default tickers file (TICKERS_PATH
-# in .env) with another file in the same config/tickers/ directory:
-#   - uv run market_up_down.py 20 tickers-energy.txt
-#
-# Output: config/output/market-up-down-YYYYMMDDHHMM.csv
-# CSV fields: symbol, high price, high date and hour, low price, low date and hour, change (high - low)
-=======
 # When -p is omitted the last 1 day is used; when -f is omitted the default file
 # from TICKERS_FILE (config/tickers/tickers.txt) is used. With neither given:
 #   uv run market_up_down.py        # 1 day of data for config/tickers/tickers.txt
@@ -50,7 +42,6 @@
 #             from the hourly bars), period_return_percent (first open to last
 #             close), close_in_range_percent (0 = closed at the low, 100 = at the
 #             high)
->>>>>>> refs/remotes/origin/main
 import os
 import sys
 import csv
@@ -122,16 +113,6 @@ TRADING_HOURS_PER_YEAR = 6.5 * 252
 MIN_BARS_FOR_VOLATILITY = 4
 
 USAGE = (
-<<<<<<< HEAD
-    "Usage: uv run market_up_down.py <period> [<tickers>]\n"
-    "  <period> is either:\n"
-    "    N                    number of most recent days, e.g. 20\n"
-    "    YYYYMMDD-YYYYMMDD    an explicit start-end date range (both inclusive),\n"
-    "                         e.g. 20260629-20260711\n"
-    "  <tickers> is optional:\n"
-    "    tickers file name under the same directory as TICKERS_PATH in .env,\n"
-    "    e.g. tickers-energy.txt (default: the file named by TICKERS_PATH)\n"
-=======
     "Usage: uv run market_up_down.py [-f <tickers file>] [-p <period>]\n"
     "  -p, --period         optional; either:\n"
     "    N                    number of most recent days, e.g. 20\n"
@@ -141,7 +122,6 @@ USAGE = (
     "  -f, --file           optional; name of a tickers file in config/tickers,\n"
     "                       e.g. tickers-sp500-it.txt (file name only, no path).\n"
     "                       Defaults to the file named by TICKERS_FILE.\n"
->>>>>>> refs/remotes/origin/main
 )
 
 
@@ -277,10 +257,6 @@ def usage_error(message):
     sys.exit(2)
 
 
-<<<<<<< HEAD
-def parse_period(arg):
-    """Parse the period argument string.
-=======
 def parse_args(argv):
     """Parse the command line into (query, start_date, end_date, tickers_path).
 
@@ -319,7 +295,6 @@ def parse_args(argv):
 
 def parse_period(arg):
     """Parse the period value.
->>>>>>> refs/remotes/origin/main
 
     Returns a tuple (query, start_date, end_date) where `query` is the dict
     passed to yfinance's history() -- either {"period": "20d"} for a
@@ -327,11 +302,7 @@ def parse_period(arg):
     range -- and start_date/end_date are the inclusive datetime bounds of the
     requested period (used for the CSV columns).
 
-<<<<<<< HEAD
-    Exits with a usage message if the argument is malformed.
-=======
     Exits with a usage message if the value is malformed.
->>>>>>> refs/remotes/origin/main
     """
     arg = arg.strip()
 
@@ -365,25 +336,6 @@ def parse_period(arg):
     return {"period": f"{days}d"}, start, end
 
 
-<<<<<<< HEAD
-def resolve_tickers_path(tickers_arg=None):
-    """Resolve the tickers file path.
-
-    Default is TICKERS_PATH from .env. If `tickers_arg` is given (e.g.
-    "tickers-energy.txt"), use that file name under the same directory as
-    TICKERS_PATH (config/tickers/).
-    """
-    default = os.getenv("TICKERS_PATH")
-    if not default:
-        usage_error("TICKERS_PATH is not set in .env")
-    if not tickers_arg:
-        return default
-    # Keep the user-supplied name a simple file name (no path components).
-    name = os.path.basename(tickers_arg.strip())
-    if not name:
-        usage_error("tickers file name must not be empty")
-    return os.path.join(os.path.dirname(default), name)
-=======
 def get_realized_volatility(hist):
     """Return annualized realized volatility, in percent, from the hourly bars.
 
@@ -440,7 +392,6 @@ def get_implied_volatility(stock, spot):
     if not ivs:
         return None
     return round(sum(ivs) / len(ivs) * 100, 2)
->>>>>>> refs/remotes/origin/main
 
 
 def get_high_low(ticker, query):
@@ -990,21 +941,8 @@ def render_html_report(
 
 
 def main():
-<<<<<<< HEAD
-    if len(sys.argv) < 2 or len(sys.argv) > 3:
-        usage_error("<period> is required; optional <tickers> file name may follow")
-
-    query, start_date, end_date = parse_period(sys.argv[1])
-    tickers_arg = sys.argv[2] if len(sys.argv) == 3 else None
-    tickers_path = resolve_tickers_path(tickers_arg)
-    resolved_tickers = get_absolute_path(tickers_path)
-    if not os.path.isfile(resolved_tickers):
-        usage_error(f"tickers file not found: {resolved_tickers}")
-    tickers = read_tickers(tickers_path)
-=======
     query, start_date, end_date, tickers_path = parse_args(sys.argv)
     tickers, sector_title = read_tickers(tickers_path)
->>>>>>> refs/remotes/origin/main
 
     start_label = start_date.strftime("%m/%d/%Y")
     end_label = end_date.strftime("%m/%d/%Y")
@@ -1061,16 +999,10 @@ def main():
     ]
 
     print(
-<<<<<<< HEAD
-        f"[{datetime.now()}] Fetching hourly data ({period_desc}) for "
-        f"{len(tickers)} symbols from {resolved_tickers}..."
-    )
-=======
         f"[{datetime.now()}] Fetching hourly data ({period_desc}) for {len(tickers)} symbols "
         f"from {os.path.basename(tickers_path)}..."
     )
     rows_data = []
->>>>>>> refs/remotes/origin/main
     with open(output_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(header)
