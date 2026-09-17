@@ -18,6 +18,7 @@ NVDA|NVIDIA Corporation|Information Technology|$5.30T|Mega
 NXT|Nextpower Inc.|Information Technology|$12.81B|Large
 OKLO|Oklo Inc.|Utilities|$7.38B|Mid
 ORCL|Oracle Corporation|Information Technology|$455.34B|Mega
+PL|Planet Labs PBC|Industrials|$6.18B|Mid
 QS|QuantumScape Corporation|Consumer Discretionary|$3.18B|Mid
 RKLB|Rocket Lab Corporation|Industrials|$43.36B|Large
 SKHY|SK hynix Inc.|Information Technology|$1.30T|Mega

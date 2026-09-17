@@ -19,9 +19,12 @@
 #   AAPL
 # becomes
 #   AAPL|Apple Inc.|Information Technology|$4.92T|Mega
+# Only bare-symbol lines are looked up and filled in; a line that already has
+# "|" fields is kept exactly as is. So after a symbol is appended to an
+# already-populated file, re-running the script fills in just that new line.
 # Line order, blank lines and an optional leading sector title line (e.g.
-# "Health Sector", see market_up_down.read_tickers) are preserved. A file that
-# already contains "|" is left untouched, so re-running the script is safe.
+# "Health Sector", see market_up_down.read_tickers) are preserved. A file with
+# no bare-symbol lines is left untouched.
 #
 # Company name, sector and market cap come from Yahoo Finance (yfinance Ticker.info). Yahoo's
 # sector names map one-to-one onto the 11 GICS sectors (GICS_SECTORS below), so
@@ -183,24 +186,28 @@ def main():
     with open(tickers_path, "r") as f:
         lines = [line.rstrip("\n") for line in f]
 
-    if any("|" in line for line in lines):
+    # Only bare-symbol lines need a lookup; lines that already carry "|"
+    # fields (populated on an earlier run, or hand-edited) are kept as is.
+    def is_bare_symbol(text):
+        return bool(text) and "|" not in text and not is_title_line(text)
+
+    symbols = [line.strip() for line in lines if is_bare_symbol(line.strip())]
+    if not symbols:
         print(
-            f"[{datetime.now()}] {os.path.basename(tickers_path)} is already "
-            "vertical-bar delimited; nothing to do."
+            f"[{datetime.now()}] {os.path.basename(tickers_path)} has no new "
+            "symbols to populate; nothing to do."
         )
         return
-
-    symbols = [line.strip() for line in lines if line.strip() and not is_title_line(line.strip())]
     print(
-        f"[{datetime.now()}] Looking up company, sector and market cap for {len(symbols)} symbols "
-        f"in {os.path.basename(tickers_path)}..."
+        f"[{datetime.now()}] Looking up company, sector and market cap for {len(symbols)} new "
+        f"symbol{'s' if len(symbols) != 1 else ''} in {os.path.basename(tickers_path)}..."
     )
 
     output_lines = []
     unclassified = []
     for line in lines:
         text = line.strip()
-        if not text or is_title_line(text):
+        if not is_bare_symbol(text):
             output_lines.append(line)
             continue
 
