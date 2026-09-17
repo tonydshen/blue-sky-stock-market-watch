@@ -1,24 +1,24 @@
-AAPL
-AMD
-AMZN
-ASML
-AVGO
-CSCO
-DELL
-GOOGL
-HPE
-INTC
-LNVGY
-META
-MSFT
-MU
-NTAP
-NVDA
-SKHY
-SMCI
-SNDK
-SPCX
-STX
-TSLA
-TSM
-WDC
+AAPL|Apple Inc.|Information Technology|$4.92T|Mega
+AMD|Advanced Micro Devices, Inc.|Information Technology|$889.85B|Mega
+AMZN|Amazon.com, Inc.|Consumer Discretionary|$2.71T|Mega
+ASML|ASML Holding N.V.|Information Technology|$625.96B|Mega
+AVGO|Broadcom Inc.|Information Technology|$1.66T|Mega
+CSCO|Cisco Systems, Inc.|Information Technology|$434.63B|Mega
+DELL|Dell Technologies Inc.|Information Technology|$374.11B|Mega
+GOOGL|Alphabet Inc.|Communication Services|$4.25T|Mega
+HPE|Hewlett Packard Enterprise Company|Information Technology|$81.03B|Large
+INTC|Intel Corporation|Information Technology|$575.13B|Mega
+LNVGY|Lenovo Group Limited|Information Technology|$55.46B|Large
+META|Meta Platforms, Inc.|Communication Services|$1.74T|Mega
+MSFT|Microsoft Corporation|Information Technology|$3.70T|Mega
+MU|Micron Technology, Inc.|Information Technology|$1.10T|Mega
+NTAP|NetApp, Inc.|Information Technology|$38.68B|Large
+NVDA|NVIDIA Corporation|Information Technology|$5.30T|Mega
+SKHY|SK hynix Inc.|Information Technology|$1.30T|Mega
+SMCI|Super Micro Computer, Inc.|Information Technology|$26.51B|Large
+SNDK|Sandisk Corporation|Information Technology|$236.38B|Mega
+SPCX|Space Exploration Technologies Corp.|Industrials|$2.04T|Mega
+STX|Seagate Technology Holdings plc|Information Technology|$182.63B|Large
+TSLA|Tesla, Inc.|Consumer Discretionary|$1.45T|Mega
+TSM|Taiwan Semiconductor Manufacturing Company Limited|Information Technology|$2.23T|Mega
+WDC|Western Digital Corporation|Information Technology|$152.82B|Large

@@ -1,32 +1,32 @@
-AMD
-AMKR
-ASTS
-AVGO
-AXTI
-COHR
-DELL
-IGV
-INTC
-IONQ
-JOBY
-LITE
-MRNA
-MU
-MUU
-NVDA
-NXT
-OKLO
-ORCL
-QS
-RKLB
-SKHY
-SNDK
-SNXX
-SOXL
-SOXS
-SPCX
-TQQQ
-TSLA
-TSM
-UMAC
-UUUU
+AMD|Advanced Micro Devices, Inc.|Information Technology|$889.85B|Mega
+AMKR|Amkor Technology, Inc.|Information Technology|$11.91B|Large
+ASTS|AST SpaceMobile, Inc.|Information Technology|$24.40B|Large
+AVGO|Broadcom Inc.|Information Technology|$1.66T|Mega
+AXTI|AXT, Inc.|Information Technology|$4.44B|Mid
+COHR|Coherent Corp.|Information Technology|$57.96B|Large
+DELL|Dell Technologies Inc.|Information Technology|$374.11B|Mega
+IGV|iShares Expanded Tech-Software Sector ETF|||
+INTC|Intel Corporation|Information Technology|$575.13B|Mega
+IONQ|IonQ, Inc.|Information Technology|$16.34B|Large
+JOBY|Joby Aviation, Inc.|Industrials|$6.15B|Mid
+LITE|Lumentum Holdings Inc.|Information Technology|$80.16B|Large
+MRNA|Moderna, Inc.|Health Care|$63.11B|Large
+MU|Micron Technology, Inc.|Information Technology|$1.10T|Mega
+MUU|Direxion Daily MU Bull 2X Shares|||
+NVDA|NVIDIA Corporation|Information Technology|$5.30T|Mega
+NXT|Nextpower Inc.|Information Technology|$12.81B|Large
+OKLO|Oklo Inc.|Utilities|$7.38B|Mid
+ORCL|Oracle Corporation|Information Technology|$455.34B|Mega
+QS|QuantumScape Corporation|Consumer Discretionary|$3.18B|Mid
+RKLB|Rocket Lab Corporation|Industrials|$43.36B|Large
+SKHY|SK hynix Inc.|Information Technology|$1.30T|Mega
+SNDK|Sandisk Corporation|Information Technology|$236.38B|Mega
+SNXX|Tradr 2X Long Sndk Daily ETF|||
+SOXL|Direxion Daily Semiconductor Bull 3X Shares|||
+SOXS|Direxion Daily Semiconductor Bear 3X Shares|||
+SPCX|Space Exploration Technologies Corp.|Industrials|$2.04T|Mega
+TQQQ|ProShares UltraPro QQQ|||
+TSLA|Tesla, Inc.|Consumer Discretionary|$1.45T|Mega
+TSM|Taiwan Semiconductor Manufacturing Company Limited|Information Technology|$2.23T|Mega
+UMAC|Unusual Machines, Inc.|Information Technology|$1.19B|Small
+UUUU|Energy Fuels Inc.|Energy|$3.17B|Mid
