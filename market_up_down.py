@@ -151,10 +151,12 @@ def read_tickers(tickers_path):
     symbol. A file may optionally start with a plain title line (no "|"),
     e.g. "Health Sector", naming the sector it covers; when present it's
     returned as sector_title and excluded from the symbol list, otherwise
-    sector_title is None.
+    sector_title is None. "#" lines are comments (e.g. the "# merged from ..."
+    trailer written by market_stock_sector.py -m) and are skipped.
     """
     with open(get_absolute_path(tickers_path), "r") as f:
-        lines = [line.strip() for line in f.readlines() if line.strip()]
+        lines = [line.strip() for line in f.readlines()
+                 if line.strip() and not line.strip().startswith("#")]
 
     # A title line (e.g. "Health Sector") never contains "|" and doesn't look
     # like a bare ticker symbol (which is all-uppercase with no spaces, e.g.

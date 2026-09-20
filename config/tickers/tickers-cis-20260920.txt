@@ -1,0 +1,54 @@
+ABBNY|ABB Ltd|Industrials|$176.89B|Large
+APP|AppLovin Corporation|Communication Services|$103.49B|Large
+ASML|ASML Holding N.V.|Information Technology|$645.26B|Mega
+AXTI|AXT, Inc.|Information Technology|$4.59B|Mid
+AXTU|T-REX 2X Long AXTI Daily Target ETF|||
+AXTX|Tradr 2X Long AXTI Daily ETF|||
+BROS|Dutch Bros Inc.|Consumer Discretionary|$7.02B|Mid
+BSP|Bending Spoons S.p.A.|Information Technology|$24.19B|Large
+CRML|Critical Metals Corp.|Materials|$988.56M|Small
+DNA|Ginkgo Bioworks Holdings, Inc.|Health Care|$530.64M|Small
+DY|Dycom Industries, Inc.|Industrials|$8.80B|Mid
+EME|EMCOR Group, Inc.|Industrials|$33.09B|Large
+ETN|Eaton Corporation plc|Industrials|$164.98B|Large
+GEV|GE Vernova Inc.|Industrials|$250.44B|Mega
+HTHIY|Hitachi, Ltd.|Industrials|$157.95B|Large
+IGV|iShares Expanded Tech-Software Sector ETF|||
+IONQ|IonQ, Inc.|Information Technology|$15.85B|Large
+JOBY|Joby Aviation, Inc.|Industrials|$6.08B|Mid
+KLAC|KLA Corporation|Information Technology|$231.25B|Mega
+KSTR|KraneShares China Technology & Semiconductor STAR 50 Index ETF|||
+LITE|Lumentum Holdings Inc.|Information Technology|$83.50B|Large
+MKSI|MKS Inc.|Information Technology|$17.05B|Large
+MRNA|Moderna, Inc.|Health Care|$61.50B|Large
+MTZ|MasTec, Inc.|Industrials|$17.22B|Large
+MU|Micron Technology, Inc.|Information Technology|$1.15T|Mega
+MUU|Direxion Daily MU Bull 2X Shares|||
+MXL|MaxLinear, Inc.|Information Technology|$7.36B|Mid
+NOK|Nokia Oyj|Information Technology|$59.79B|Large
+NOW|ServiceNow, Inc.|Information Technology|$140.06B|Large
+NTAP|NetApp, Inc.|Information Technology|$38.85B|Large
+NVDA|NVIDIA Corporation|Information Technology|$5.37T|Mega
+NXT|Nextpower Inc.|Information Technology|$12.36B|Large
+OKLO|Oklo Inc.|Utilities|$7.07B|Mid
+ON|ON Semiconductor Corporation|Information Technology|$27.24B|Large
+ONON|On Holding AG|Consumer Discretionary|$9.11B|Mid
+ORCL|Oracle Corporation|Information Technology|$446.33B|Mega
+PL|Planet Labs PBC|Industrials|$5.97B|Mid
+POWL|Powell Industries, Inc.|Industrials|$6.70B|Mid
+QS|QuantumScape Corporation|Consumer Discretionary|$3.09B|Mid
+RKLB|Rocket Lab Corporation|Industrials|$41.29B|Large
+SBGSY|Schneider Electric S.E.|Industrials|$185.10B|Large
+SNOW|Snowflake Inc.|Information Technology|$117.28B|Large
+SNXX|Tradr 2X Long Sndk Daily ETF|||
+SOXL|Direxion Daily Semiconductor Bull 3X Shares|||
+SOXS|Direxion Daily Semiconductor Bear 3X Shares|||
+STRL|Sterling Infrastructure, Inc.|Industrials|$15.87B|Large
+TQQQ|ProShares UltraPro QQQ|||
+TSLA|Tesla, Inc.|Consumer Discretionary|$1.44T|Mega
+TSM|Taiwan Semiconductor Manufacturing Company Limited|Information Technology|$2.25T|Mega
+UMAC|Unusual Machines, Inc.|Information Technology|$1.16B|Small
+UUUU|Energy Fuels Inc.|Energy|$3.10B|Mid
+VATE|INNOVATE Corp.|Industrials|$111.32M|Micro
+VIXY|ProShares VIX Short-Term Futures ETF|||
+VOYG|Voyager Technologies, Inc.|Industrials|$2.19B|Mid

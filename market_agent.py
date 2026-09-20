@@ -35,8 +35,11 @@ def get_absolute_path(path):
     return path
 
 def read_tickers(tickers_path):
+    # "#" lines are comments, e.g. the "# merged from ..." trailer that
+    # market_stock_sector.py -m writes.
     with open(get_absolute_path(tickers_path), "r") as f:
-        return [line.strip() for line in f.readlines() if line.strip()]
+        return [line.strip() for line in f.readlines()
+                if line.strip() and not line.strip().startswith("#")]
 
 def get_market_data(tickers):
     data_points = {}
