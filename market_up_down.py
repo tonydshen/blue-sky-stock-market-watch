@@ -42,6 +42,14 @@
 #             from the hourly bars), period_return_percent (first open to last
 #             close), close_in_range_percent (0 = closed at the low, 100 = at the
 #             high)
+# Additional requirements, 09/21/2026:
+# 1. Lock the first column (symbol) so it always shows when scrolling horizontally. 
+#
+# Revised on 09/21/2026: implemented requirement 1 above. The Symbol header
+# and body cells are `position: sticky; left: 0` inside the same .table-scroll
+# container that already keeps the header row sticky at the top, so the column
+# stays put on horizontal scroll and the top-left cell stays put on both axes.
+
 import os
 import sys
 import csv
@@ -659,9 +667,23 @@ REPORT_CSS = """
     padding: 0;
     font-weight: 600;
     border-bottom: 1px solid var(--border);
-    z-index: 1;
+    z-index: 2;
   }
-  thead th:first-child { text-align: left; }
+  /* The Symbol column is locked (requirement 1, 09/21/2026): its header
+     cell sticks to both the top and left edges of the scrollport, and its
+     body cells to the left edge. Sticky cells need an opaque background
+     (a `position: sticky` cell is still painted in normal table order, so
+     the cells scrolling under it would show through), so body cells take
+     the row's background -- default, even-row and hover -- via `inherit`,
+     which is why tbody tr sets a background explicitly below. The
+     box-shadow draws the column's right edge, because with
+     border-collapse the cell borders don't travel with a sticky cell. */
+  thead th:first-child {
+    text-align: left;
+    left: 0;
+    z-index: 3;
+    box-shadow: 1px 0 0 var(--border);
+  }
   thead th.two-line { text-align: center; }
   thead th.unsortable {
     padding: 10px 12px;
@@ -698,7 +720,16 @@ REPORT_CSS = """
     border-bottom: 1px solid var(--border);
     font-variant-numeric: tabular-nums;
   }
-  tbody td:first-child { text-align: left; font-weight: 600; }
+  tbody td:first-child {
+    text-align: left;
+    font-weight: 600;
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: inherit;
+    box-shadow: 1px 0 0 var(--border);
+  }
+  tbody tr { background: var(--panel); }
   tbody tr:nth-child(even) { background: var(--row-alt); }
   tbody tr:hover { background: var(--row-hover); }
   td.pos { color: var(--pos); font-weight: 600; }
@@ -854,7 +885,7 @@ def render_html_report(
     <p class="meta">Generated {html.escape(generated_at)} &middot; {symbol_count} symbols from {html.escape(tickers_name)} &middot; {html.escape(period_desc)}</p>
   </header>
 
-  <p class="hint">Click a column header to sort; click again to reverse. Start Date and End Date are fixed for this report and aren't sortable.</p>
+  <p class="hint">Click a column header to sort; click again to reverse. Start Date and End Date are fixed for this report and aren't sortable. The Symbol column stays put when the table scrolls sideways.</p>
 
   <div class="panel">
     <div class="table-scroll">
