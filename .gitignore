@@ -45,3 +45,4 @@ yarn-error.*
 # Ignore what is listed below for blue-sky-stock-market-watch
 config/output
 __pycache__/
+*:Zone.Identifier
