@@ -1,70 +1,70 @@
-AAPL
-ACN
-ADBE
-ADI
-ADP
-ADSK
-AKAM
-ALTR
-AMAT
-AMD
-BMC
-BRCM
-CA
-CRM
-CSC
-CSCO
-CTSH
-CTXS
-DELL
-EA
-EBAY
-EMC
-FFIV
-FIS
-FISV
-FLIR
-GOOG
-HPQ
-HRS
-IBM
-INTC
-INTU
-JBL
-JDSU
-JNPR
-KLAC
-LLTC
-LRCX
-LSI
-LXK
-MA
-MCHP
-MOLX
-MSFT
-MSI
-MU
-NFLX
-NTAP
-NVDA
-ORCL
-PAYX
-QCOM
-RHT
-SAI
-SNDK
-STX
-SYMC
-TDC
-TEL
-TER
-TSS
-TXN
-V
-VRSN
-WDC
-WU
-XLNX
-XRX
-YHOO
+AAPL|Apple Inc.|Information Technology|$4.95T|Mega
+ACN|Accenture plc|Information Technology|$113.89B|Large
+ADBE|Adobe Inc.|Information Technology|$99.18B|Large
+ADI|Analog Devices, Inc.|Information Technology|$185.59B|Large
+ADP|Automatic Data Processing, Inc.|Information Technology|$107.24B|Large
+ADSK|Autodesk, Inc.|Information Technology|$45.74B|Large
+AKAM|Akamai Technologies, Inc.|Information Technology|$16.87B|Large
+ALTR||||
+AMAT|Applied Materials, Inc.|Information Technology|$368.42B|Mega
+AMD|Advanced Micro Devices, Inc.|Information Technology|$1.00T|Mega
+BMC||||
+BRCM|7486608|||
+CA||||
+CRM|Salesforce, Inc.|Information Technology|$194.57B|Large
+CSC|CSC Collective Holdings Ltd|||
+CSCO|Cisco Systems, Inc.|Information Technology|$439.44B|Mega
+CTSH|Cognizant Technology Solutions Corporation|Information Technology|$26.75B|Large
+CTXS||||
+DELL|Dell Technologies Inc.|Information Technology|$365.79B|Mega
+EA|Electronic Arts Inc|Communication Services|$52.93B|Large
+EBAY|eBay Inc.|Consumer Discretionary|$48.19B|Large
+EMC|Global X Emerging Markets Great Consumer ETF|||
+FFIV|F5, Inc.|Information Technology|$25.49B|Large
+FIS|Fidelity National Information Services, Inc.|Information Technology|$18.15B|Large
+FISV|Fiserv, Inc.||$24.71B|Large
+FLIR||||
+GOOG|Alphabet Inc.|Communication Services|$4.29T|Mega
+HPQ|HP Inc.|Information Technology|$29.71B|Large
+HRS||||
+IBM|International Business Machines Corporation|Information Technology|$218.51B|Mega
+INTC|Intel Corporation|Information Technology|$643.74B|Mega
+INTU|Intuit Inc.|Information Technology|$81.27B|Large
+JBL|Jabil Inc.|Information Technology|$31.82B|Large
+JDSU|45716466|||
+JNPR||||
+KLAC|KLA Corporation|Information Technology|$240.37B|Mega
+LLTC|4104459|||
+LRCX|Lam Research Corporation|Information Technology|$378.25B|Mega
+LSI||||
+LXK|1732416|||
+MA|Mastercard Incorporated|Financials|$497.27B|Mega
+MCHP|Microchip Technology Incorporated|Information Technology|$40.61B|Large
+MOLX|655556|||
+MSFT|Microsoft Corporation|Information Technology|$3.72T|Mega
+MSI|Motorola Solutions, Inc.|Information Technology|$76.35B|Large
+MU|Micron Technology, Inc.|Information Technology|$1.18T|Mega
+NFLX|Netflix, Inc.|Communication Services|$305.47B|Mega
+NTAP|NetApp, Inc.|Information Technology|$38.92B|Large
+NVDA|NVIDIA Corporation|Information Technology|$5.49T|Mega
+ORCL|Oracle Corporation|Information Technology|$449.21B|Mega
+PAYX|Paychex, Inc.|Information Technology|$40.94B|Large
+QCOM|QUALCOMM Incorporated|Information Technology|$207.45B|Mega
+RHT||||
+SAI||||
+SNDK|Sandisk Corporation|Information Technology|$258.67B|Mega
+STX|Seagate Technology Holdings plc|Information Technology|$199.50B|Large
+SYMC||||
+TDC|Teradata Corporation|Information Technology|$2.73B|Mid
+TEL|TE Connectivity plc|Information Technology|$60.80B|Large
+TER|Teradyne, Inc.|Information Technology|$59.65B|Large
+TSS||||
+TXN|Texas Instruments Incorporated|Information Technology|$247.37B|Mega
+V|Visa Inc.|Financials|$694.53B|Mega
+VRSN|VeriSign, Inc.|Information Technology|$27.86B|Large
+WDC|Western Digital Corporation|Information Technology|$161.58B|Large
+WU|The Western Union Company|Financials|$1.93B|Small
+XLNX||||
+XRX|Xerox Holdings Corporation|Industrials|$437.28M|Small
+YHOO||||
 

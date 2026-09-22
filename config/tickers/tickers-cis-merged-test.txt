@@ -1,3 +1,4 @@
+Chinese Investors Interested Stocks
 AAPL|Apple Inc.|Information Technology|$4.91T|Mega
 ABBNY|ABB Ltd|Industrials|$176.89B|Large
 AMD|Advanced Micro Devices, Inc.|Information Technology|$913.89B|Mega
@@ -73,4 +74,5 @@ VATE|INNOVATE Corp.|Industrials|$111.32M|Micro
 VIXY|ProShares VIX Short-Term Futures ETF|||
 VOYG|Voyager Technologies, Inc.|Industrials|$2.19B|Mid
 WDC|Western Digital Corporation|Information Technology|$159.13B|Large
+AAOI|Applied Optoelectronics, Inc.|Information Technology|$9.08B|Mid
 # merged from tickers-cis-20260920-b.txt, tickers-cis-20260920.txt, tickers-chinese-interested-stocks.txt on 2026-09-20 11:37:09

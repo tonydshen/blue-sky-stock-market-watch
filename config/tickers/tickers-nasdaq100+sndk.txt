@@ -1,102 +1,103 @@
-NVDA
-GOOGL
-GOOG
-AAPL
-MSFT
-AMZN
-AVGO
-TSLA
-META
-MU
-AMD
-WMT
-ASML
-INTC
-AMAT
-LRCX
-CSCO
-COST
-KLAC
-ARM
-NFLX
-PLTR
-PANW
-TXN
-MRVL
-LIN
-WDC
-STX
-AMGN
-QCOM
-CRWD
-ADI
-PEP
-TMUS
-APP
-GILD
-SHOP
-ISRG
-BKNG
-VRTX
-SBUX
-FTNT
-PDD
-CDNS
-MAR
-MNST
-DDOG
-ADP
-CEG
-CSX
-CMCSA
-MELI
-SNPS
-ABNB
-ADBE
-DASH
-ORLY
-AEP
-MDLZ
-INTU
-HON
-NXPI
-ROST
-CTAS
-MPWR
-WBD
-REGN
-PCAR
-FAST
-BKR
-EA
-XEL
-FANG
-MCHP
-FER
-EXC
-TTWO
-AXON
-ODFL
-KDP
-CCEP
-IDXX
-ADSK
-ALNY
-PYPL
-TRI
-PAYX
-ROP
-MSTR
-WDAY
-GEHC
-KHC
-CPRT
-DXCM
-VRSK
-INSM
-ZS
-TEAM
-CHTR
-CTSH
-CSGP
-SNDK
+NASDAQ 100 + SNDK
+NVDA|NVIDIA Corporation|Information Technology|$5.49T|Mega
+GOOGL|Alphabet Inc.|Communication Services|$4.34T|Mega
+GOOG|Alphabet Inc.|Communication Services|$4.29T|Mega
+AAPL|Apple Inc.|Information Technology|$4.95T|Mega
+MSFT|Microsoft Corporation|Information Technology|$3.72T|Mega
+AMZN|Amazon.com, Inc.|Consumer Discretionary|$2.79T|Mega
+AVGO|Broadcom Inc.|Information Technology|$1.73T|Mega
+TSLA|Tesla, Inc.|Consumer Discretionary|$1.48T|Mega
+META|Meta Platforms, Inc.|Communication Services|$1.89T|Mega
+MU|Micron Technology, Inc.|Information Technology|$1.18T|Mega
+AMD|Advanced Micro Devices, Inc.|Information Technology|$1.00T|Mega
+WMT|Walmart Inc.|Consumer Staples|$855.02B|Mega
+ASML|ASML Holding N.V.|Information Technology|$657.32B|Mega
+INTC|Intel Corporation|Information Technology|$643.74B|Mega
+AMAT|Applied Materials, Inc.|Information Technology|$368.42B|Mega
+LRCX|Lam Research Corporation|Information Technology|$378.25B|Mega
+CSCO|Cisco Systems, Inc.|Information Technology|$439.44B|Mega
+COST|Costco Wholesale Corporation|Consumer Staples|$398.46B|Mega
+KLAC|KLA Corporation|Information Technology|$240.37B|Mega
+ARM|Arm Holdings plc|Information Technology|$344.86B|Mega
+NFLX|Netflix, Inc.|Communication Services|$305.47B|Mega
+PLTR|Palantir Technologies Inc.|Information Technology|$439.98B|Mega
+PANW|Palo Alto Networks, Inc.|Information Technology|$304.10B|Mega
+TXN|Texas Instruments Incorporated|Information Technology|$247.37B|Mega
+MRVL|Marvell Technology, Inc.|Information Technology|$231.31B|Mega
+LIN|Linde plc|Materials|$210.90B|Mega
+WDC|Western Digital Corporation|Information Technology|$161.58B|Large
+STX|Seagate Technology Holdings plc|Information Technology|$199.50B|Large
+AMGN|Amgen Inc.|Health Care|$212.55B|Mega
+QCOM|QUALCOMM Incorporated|Information Technology|$207.45B|Mega
+CRWD|CrowdStrike Holdings, Inc.|Information Technology|$255.32B|Mega
+ADI|Analog Devices, Inc.|Information Technology|$185.59B|Large
+PEP|PepsiCo, Inc.|Consumer Staples|$177.02B|Large
+TMUS|T-Mobile US, Inc.|Communication Services|$177.28B|Large
+APP|AppLovin Corporation|Communication Services|$110.92B|Large
+GILD|Gilead Sciences, Inc.|Health Care|$186.69B|Large
+SHOP|Shopify Inc.|Information Technology|$178.97B|Large
+ISRG|Intuitive Surgical, Inc.|Health Care|$143.90B|Large
+BKNG|Booking Holdings Inc.|Consumer Discretionary|$126.62B|Large
+VRTX|Vertex Pharmaceuticals Incorporated|Health Care|$129.45B|Large
+SBUX|Starbucks Corporation|Consumer Discretionary|$108.19B|Large
+FTNT|Fortinet, Inc.|Information Technology|$128.57B|Large
+PDD|PDD Holdings Inc.|Consumer Discretionary|$112.87B|Large
+CDNS|Cadence Design Systems, Inc.|Information Technology|$81.21B|Large
+MAR|Marriott International, Inc.|Consumer Discretionary|$89.35B|Large
+MNST|Monster Beverage Corporation|Consumer Staples|$86.20B|Large
+DDOG|Datadog, Inc.|Information Technology|$87.99B|Large
+ADP|Automatic Data Processing, Inc.|Information Technology|$107.24B|Large
+CEG|Constellation Energy Corporation|Utilities|$92.87B|Large
+CSX|CSX Corporation|Industrials|$85.20B|Large
+CMCSA|Comcast Corporation|Communication Services|$81.37B|Large
+MELI|MercadoLibre, Inc.|Consumer Discretionary|$92.29B|Large
+SNPS|Synopsys, Inc.|Information Technology|$77.01B|Large
+ABNB|Airbnb, Inc.|Consumer Discretionary|$99.90B|Large
+ADBE|Adobe Inc.|Information Technology|$99.18B|Large
+DASH|DoorDash, Inc.|Consumer Discretionary|$83.99B|Large
+ORLY|O'Reilly Automotive, Inc.|Consumer Discretionary|$67.05B|Large
+AEP|American Electric Power Company, Inc.|Utilities|$65.34B|Large
+MDLZ|Mondelez International, Inc.|Consumer Staples|$76.80B|Large
+INTU|Intuit Inc.|Information Technology|$81.27B|Large
+HON|Honeywell International Inc.|Industrials|$65.44B|Large
+NXPI|NXP Semiconductors N.V.|Information Technology|$58.61B|Large
+ROST|Ross Stores, Inc.|Consumer Discretionary|$74.18B|Large
+CTAS|Cintas Corporation|Industrials|$78.79B|Large
+MPWR|Monolithic Power Systems, Inc.|Information Technology|$62.79B|Large
+WBD|Warner Bros. Discovery, Inc.|Communication Services|$77.22B|Large
+REGN|Regeneron Pharmaceuticals, Inc.|Health Care|$82.18B|Large
+PCAR|PACCAR Inc|Industrials|$60.39B|Large
+FAST|Fastenal Company|Industrials|$56.97B|Large
+BKR|Baker Hughes Company|Energy|$57.41B|Large
+EA|Electronic Arts Inc|Communication Services|$52.93B|Large
+XEL|Xcel Energy Inc.|Utilities|$44.88B|Large
+FANG|Diamondback Energy, Inc.|Energy|$53.00B|Large
+MCHP|Microchip Technology Incorporated|Information Technology|$40.61B|Large
+FER|Ferrovial N.V.|Industrials|$40.32B|Large
+EXC|Exelon Corporation|Utilities|$43.25B|Large
+TTWO|Take-Two Interactive Software, Inc.|Communication Services|$39.25B|Large
+AXON|Axon Enterprise, Inc.|Industrials|$36.72B|Large
+ODFL|Old Dominion Freight Line, Inc.|Industrials|$36.47B|Large
+KDP|Keurig Dr Pepper Inc.|Consumer Staples|$41.67B|Large
+CCEP|Coca-Cola Europacific Partners PLC|Consumer Staples|$44.24B|Large
+IDXX|IDEXX Laboratories, Inc.|Health Care|$40.60B|Large
+ADSK|Autodesk, Inc.|Information Technology|$45.74B|Large
+ALNY|Alnylam Pharmaceuticals, Inc.|Health Care|$32.69B|Large
+PYPL|PayPal Holdings, Inc.|Financials|$45.01B|Large
+TRI|Thomson Reuters Corporation|Industrials|$41.35B|Large
+PAYX|Paychex, Inc.|Information Technology|$40.94B|Large
+ROP|Roper Technologies, Inc.|Information Technology|$36.14B|Large
+MSTR|Strategy Inc|Information Technology|$66.94B|Large
+WDAY|Workday, Inc.|Information Technology|$46.25B|Large
+GEHC|GE HealthCare Technologies Inc.|Health Care|$29.27B|Large
+KHC|The Kraft Heinz Company|Consumer Staples|$28.90B|Large
+CPRT|Copart, Inc.|Industrials|$26.77B|Large
+DXCM|DexCom, Inc.|Health Care|$33.65B|Large
+VRSK|Verisk Analytics, Inc.|Industrials|$22.39B|Large
+INSM|Insmed Incorporated|Health Care|$26.42B|Large
+ZS|Zscaler, Inc.|Information Technology|$33.77B|Large
+TEAM|Atlassian Corporation|Information Technology|$49.53B|Large
+CHTR|Charter Communications, Inc.|Communication Services|$16.03B|Large
+CTSH|Cognizant Technology Solutions Corporation|Information Technology|$26.75B|Large
+CSGP|CoStar Group, Inc.|Real Estate|$11.77B|Large
+SNDK|Sandisk Corporation|Information Technology|$258.67B|Mega
