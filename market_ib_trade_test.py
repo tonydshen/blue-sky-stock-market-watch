@@ -1,51 +1,124 @@
 # market_ib_trade_test.py
 # Revision history
 # Created on 09/25/26 - First connectivity + order test against the Interactive Brokers TWS API.
+# revised on 09/25/26 - Replaced the TWS API (ib_async socket client) with the Client Portal Web API
+#                       (REST over HTTPS against the locally running Client Portal Gateway).
+#                       The previous ib_async version is in git at commit c977754.
 # Requirements, 09/25/26:
-# 1. Connect to a running TWS or IB Gateway over the TWS API (ib_async), with host/port/client id
-#    read from .env (IB_HOST, IB_PORT, IB_CLIENT_ID, IB_ACCOUNT) and overridable on the command line.
-# 2. Refuse to touch a live account unless --live is passed AND the user types a confirmation.
+# 1. Talk to the Client Portal Gateway over REST at https://127.0.0.1:5000/v1/api (IB_WEBAPI_URL in .env).
+#    The gateway uses a self-signed certificate, so TLS verification is disabled for that host only.
+# 2. Check the session first and explain the browser login when the gateway is not authenticated;
+#    every endpoint returns 401 until the user logs in at https://localhost:5000 and the SSO completes.
+# 3. Refuse to touch a live account unless --live is passed AND the user types a confirmation.
 #    IB paper accounts start with "DU"; anything else is treated as real money.
-# 3. Report which account is connected and its buying power, so the target account is never a guess.
-# 4. Qualify the contract and read a current price, falling back to delayed data when the account
-#    has no live market data subscription (the usual case on a new account).
-# 5. Place one small order. Default is a limit order priced away from the market so the full
+# 4. Report which account is connected and its net liquidation / buying power.
+# 5. Resolve the symbol to a conid and read a current price from the market data snapshot,
+#    tolerating the prefixed values IB returns ("C12.34" = previous close) and the empty first snapshot.
+# 6. Place one small order. Default is a limit order priced away from the market so the full
 #    lifecycle (submit -> open -> cancel) can be exercised without an unintended fill.
-# 6. Offer --what-if as a no-order dry run: IB returns margin and commission impact only.
-# 7. Print the order status transitions, then cancel the order unless --keep is passed.
+# 7. Answer the gateway's order confirmation prompts (/iserver/reply) instead of stalling on them.
+# 8. Offer --what-if as a no-order dry run: IB returns margin and commission impact only.
+# 9. Print the order status, then cancel the order unless --keep is passed.
 #
 import os
 import sys
+import time
 import argparse
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from dotenv import load_dotenv
 
-try:
-    from ib_async import IB, Stock, LimitOrder, MarketOrder
-except ImportError:
-    sys.exit("Error: ib_async is not installed. Run: uv sync   (or: uv add ib_async)")
+import requests
+import urllib3
+from dotenv import load_dotenv
 
 load_dotenv()
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 ET = ZoneInfo("America/New_York")
 
-# TWS API listening ports, as configured in Global Configuration -> API -> Settings
-PORTS = {
-    "tws-paper": 7497,
-    "tws-live": 7496,
-    "gateway-paper": 4002,
-    "gateway-live": 4001,
-}
+# Use 127.0.0.1 rather than "localhost": under some proxy/WSL setups "localhost" is resolved
+# or intercepted elsewhere and the request never reaches the gateway.
+DEFAULT_BASE_URL = "https://127.0.0.1:5000/v1/api"
 
 DEFAULT_SYMBOL = "F"        # cheap, very liquid; one share is a few dollars
 DEFAULT_QUANTITY = 1
 DEFAULT_OFFSET_PCT = 5.0    # limit this far below the market on a BUY, so it rests unfilled
 
+# Snapshot field ids: 31 last, 84 bid, 86 ask, 7295 open, 7296 close
+SNAPSHOT_FIELDS = "31,84,86,7295,7296"
+
+LOGIN_HELP = (
+    "The gateway is running but this session is not authenticated.\n"
+    "\n"
+    "If you have not logged in yet:\n"
+    "  1. Open https://localhost:5000 in a browser on this machine.\n"
+    "  2. Accept the self-signed certificate warning.\n"
+    "  3. Log in with your IB username and password.\n"
+    "  4. Wait for 'Client login succeeds', then re-run this script.\n"
+    "The session also expires after inactivity, so this can appear on a gateway that worked earlier.\n"
+    "\n"
+    "If you DID log in and still get this, the browser login can succeed while IB separately\n"
+    "denies the gateway's own entitlement check. Check the gateway log:\n"
+    "  grep -E 'Client login succeeds|Access Denied|CP_LOGIN_FAILED' <gateway>/logs/gw.*.log\n"
+    "'Client login succeeds' followed by 'sso/validate ... Access Denied' means the credentials\n"
+    "were accepted but the account is not entitled to the Web API -- not a problem in this script.\n"
+    "Usual causes: a paper username (paper logins have limited Client Portal access), or an\n"
+    "account that is not fully approved/funded yet. Try the live username, or use the TWS API."
+)
+
+
+class GatewayError(RuntimeError):
+    pass
+
+
+class IBWebAPI:
+    """Thin wrapper over the Client Portal Web API endpoints this script needs."""
+
+    def __init__(self, base_url):
+        self.base_url = base_url.rstrip("/")
+        self.session = requests.Session()
+        self.session.verify = False  # gateway ships a self-signed cert (requirement 1)
+
+    def request(self, method, endpoint, **kwargs):
+        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+        kwargs.setdefault("timeout", 20)
+        try:
+            response = self.session.request(method, url, **kwargs)
+        except requests.exceptions.SSLError as exc:
+            raise GatewayError(f"TLS error talking to {url}: {exc}") from exc
+        except requests.exceptions.RequestException as exc:
+            raise GatewayError(
+                f"Could not reach the Client Portal Gateway at {url} ({exc}).\n"
+                "  - Is the gateway running?  cd clientportal.gw && bin/run.sh root/conf.yaml\n"
+                "  - It listens on port 5000 by default; set IB_WEBAPI_URL in .env if you changed it."
+            ) from exc
+
+        if response.status_code == 401:
+            raise GatewayError(LOGIN_HELP)
+        if response.status_code >= 400:
+            raise GatewayError(f"{method} {endpoint} -> HTTP {response.status_code}: {response.text[:400]}")
+
+        if not response.content:
+            return None
+        try:
+            return response.json()
+        except ValueError:
+            raise GatewayError(f"{method} {endpoint} returned non-JSON: {response.text[:400]}") from None
+
+    def get(self, endpoint, **kwargs):
+        return self.request("GET", endpoint, **kwargs)
+
+    def post(self, endpoint, **kwargs):
+        return self.request("POST", endpoint, **kwargs)
+
+    def delete(self, endpoint, **kwargs):
+        return self.request("DELETE", endpoint, **kwargs)
+
 
 def parse_args():
     p = argparse.ArgumentParser(
-        description="Place one small test trade through the Interactive Brokers TWS API."
+        description="Place one small test trade through the Interactive Brokers Client Portal Web API."
     )
     p.add_argument("--symbol", default=DEFAULT_SYMBOL, help=f"US stock symbol (default {DEFAULT_SYMBOL})")
     p.add_argument("--quantity", type=int, default=DEFAULT_QUANTITY, help="Share count (default 1)")
@@ -61,246 +134,327 @@ def parse_args():
     p.add_argument("--keep", action="store_true", help="Leave the order working instead of cancelling it")
     p.add_argument("--wait", type=int, default=10, help="Seconds to watch the order before cancelling (default 10)")
     p.add_argument("--outside-rth", action="store_true", help="Allow the order to work outside regular trading hours")
-    p.add_argument("--host", default=os.getenv("IB_HOST", "127.0.0.1"), help="TWS/Gateway host (default 127.0.0.1)")
-    p.add_argument("--port", type=int, default=None, help="TWS/Gateway port; overrides --endpoint and IB_PORT")
-    p.add_argument("--endpoint", choices=sorted(PORTS), default=None,
-                   help="Named port preset; overrides IB_PORT (default tws-paper = 7497)")
-    p.add_argument("--client-id", type=int, default=int(os.getenv("IB_CLIENT_ID", "17")),
-                   help="API client id; must be unique per connection (default 17)")
-    p.add_argument("--account", default=os.getenv("IB_ACCOUNT"), help="Account code, if the login has more than one")
+    p.add_argument("--url", default=os.getenv("IB_WEBAPI_URL", DEFAULT_BASE_URL),
+                   help=f"Gateway base URL (default {DEFAULT_BASE_URL})")
+    p.add_argument("--account", default=os.getenv("IB_ACCOUNT"), help="Account id, if the login has more than one")
     p.add_argument("--live", action="store_true", help="Required to trade a non-paper (real money) account")
     return p.parse_args()
 
 
-def resolve_port(args):
-    """--port wins, then an explicit --endpoint preset, then IB_PORT in .env, then tws-paper."""
-    if args.port:
-        return args.port
-    if args.endpoint:
-        return PORTS[args.endpoint]
-    if os.getenv("IB_PORT"):
-        return int(os.getenv("IB_PORT"))
-    return PORTS["tws-paper"]
+def check_auth(api):
+    """Requirement 2: confirm the SSO session before anything else."""
+    status = api.post("iserver/auth/status")
+    if not isinstance(status, dict):
+        raise GatewayError(f"Unexpected auth status payload: {status!r}")
 
+    authenticated = status.get("authenticated", False)
+    connected = status.get("connected", False)
+    competing = status.get("competing", False)
 
-def connect(ib, host, port, client_id):
-    print(f"Connecting to {host}:{port} as client {client_id} ...")
-    try:
-        ib.connect(host, port, clientId=client_id, timeout=15)
-    except (ConnectionRefusedError, OSError) as exc:
-        sys.exit(
-            f"Error: could not reach TWS/IB Gateway at {host}:{port} ({exc}).\n"
-            "  - Is TWS or IB Gateway running and logged in?\n"
-            "  - Global Configuration -> API -> Settings: 'Enable ActiveX and Socket Clients' checked,\n"
-            "    'Socket port' matching the port above, and this machine in 'Trusted IPs'.\n"
-            f"  - Ports: {', '.join(f'{k}={v}' for k, v in sorted(PORTS.items()))}"
+    print(f"Gateway session: authenticated={authenticated} connected={connected} competing={competing}")
+
+    if competing:
+        raise GatewayError(
+            "Another session is competing for this login (TWS, the mobile app or IB's website is "
+            "logged in with the same user). Log that one out and re-run."
         )
-    print(f"Connected. Server version {ib.client.serverVersion()}.")
+
+    if authenticated:
+        return
+
+    # A browser SSO login leaves the gateway authenticated but without a brokerage session;
+    # ssodh/init opens that session. A session that merely lapsed needs reauthenticate instead.
+    for endpoint, payload in (("iserver/auth/ssodh/init", {"publish": True, "compete": True}),
+                              ("iserver/reauthenticate", None)):
+        print(f"Not authenticated; attempting /{endpoint} ...")
+        try:
+            api.post(endpoint, json=payload) if payload else api.post(endpoint)
+        except GatewayError:
+            continue
+        for _ in range(8):
+            time.sleep(1)
+            retry = api.post("iserver/auth/status")
+            if isinstance(retry, dict) and retry.get("authenticated"):
+                print("Session established.")
+                return
+
+    raise GatewayError(LOGIN_HELP)
 
 
-def choose_account(ib, requested):
-    """Returns the account code to trade, refusing to guess when the login has several."""
-    accounts = ib.managedAccounts()
+def choose_account(api, requested):
+    """Returns the account id to trade. /iserver/accounts must be called before any order endpoint."""
+    payload = api.get("iserver/accounts")
+    accounts = (payload or {}).get("accounts") or []
     if not accounts:
-        sys.exit("Error: the connection reported no managed accounts.")
+        raise GatewayError("The gateway reported no accounts for this login.")
+
     if requested:
         if requested not in accounts:
-            sys.exit(f"Error: account {requested} is not in this login's accounts: {', '.join(accounts)}")
+            raise GatewayError(f"Account {requested} is not in this login's accounts: {', '.join(accounts)}")
         return requested
     if len(accounts) > 1:
-        sys.exit(f"Error: this login has several accounts. Pass --account with one of: {', '.join(accounts)}")
+        raise GatewayError(f"This login has several accounts. Pass --account with one of: {', '.join(accounts)}")
     return accounts[0]
 
 
-def guard_live_account(ib, account, live_flag):
-    """Requirement 2: a non-DU account is real money and needs --live plus a typed confirmation."""
+def guard_live_account(account, live_flag, dry_run=False):
+    """Requirement 3: a non-DU account is real money and needs --live plus a typed confirmation.
+
+    dry_run is the --what-if case: /orders/whatif is a preview endpoint that sends no order,
+    so it is allowed to run against a live account without --live.
+    """
     is_paper = account.upper().startswith("DU")
-    kind = "PAPER" if is_paper else "LIVE (real money)"
-    print(f"Account {account} is a {kind} account.")
+    print(f"Account {account} is a {'PAPER' if is_paper else 'LIVE (real money)'} account.")
 
     if is_paper:
         if live_flag:
             print("Note: --live was passed but this is a paper account; continuing.")
         return
 
+    if dry_run:
+        print("--what-if on a live account: this is a preview only, no order will be sent.")
+        return
+
     if not live_flag:
-        ib.disconnect()
         sys.exit(
             f"Refusing to place an order on live account {account} without --live.\n"
-            "Point the script at your paper account first (--endpoint tws-paper, port 7497),\n"
-            "or re-run with --live if you really mean to trade real money."
+            "Log the gateway into your paper account first, or re-run with --live if you\n"
+            "really mean to trade real money."
         )
 
     if not sys.stdin.isatty():
-        ib.disconnect()
         sys.exit("Refusing to trade a live account without an interactive confirmation.")
 
-    answer = input(f"Type the account code {account} to confirm a REAL order: ").strip()
-    if answer != account:
-        ib.disconnect()
+    if input(f"Type the account id {account} to confirm a REAL order: ").strip() != account:
         sys.exit("Confirmation did not match. Nothing was sent.")
 
 
-def show_account(ib, account):
-    """Requirement 3: print enough of the account to see it is the one intended."""
-    wanted = {"NetLiquidation", "TotalCashValue", "BuyingPower", "AvailableFunds"}
-    values = {v.tag: (v.value, v.currency) for v in ib.accountSummary(account) if v.tag in wanted}
+def show_account(api, account):
+    """Requirement 4: print enough of the account to see it is the one intended."""
+    try:
+        summary = api.get(f"portfolio/{account}/summary")
+    except GatewayError as exc:
+        print(f"(account summary unavailable: {exc})")
+        return
+
     print("Account summary:")
-    for tag in ("NetLiquidation", "TotalCashValue", "BuyingPower", "AvailableFunds"):
-        if tag in values:
-            value, currency = values[tag]
-            print(f"  {tag:<16} {float(value):>15,.2f} {currency}")
+    for key, label in (("netliquidation", "Net liquidation"), ("totalcashvalue", "Total cash"),
+                       ("buyingpower", "Buying power"), ("availablefunds", "Available funds")):
+        entry = (summary or {}).get(key)
+        if isinstance(entry, dict) and entry.get("amount") is not None:
+            print(f"  {label:<16} {entry['amount']:>15,.2f} {entry.get('currency', '')}")
 
 
-def get_price(ib, contract):
-    """Requirement 4: last/close price, using delayed data when there is no live subscription."""
-    ib.reqMarketDataType(1)  # 1 = live
-    ticker = ib.reqMktData(contract, "", False, False)
-    ib.sleep(3)
+def find_conid(api, symbol):
+    """Requirement 5: resolve the symbol to an IB contract id."""
+    results = api.post("iserver/secdef/search", json={"symbol": symbol, "name": False, "secType": "STK"})
+    if not results:
+        raise GatewayError(f"No contract found for symbol '{symbol}'.")
 
-    price = ticker.marketPrice()
-    if price != price or price <= 0:  # NaN or unset -> no live subscription
-        print("No live market data; falling back to delayed (market data type 3).")
-        ib.reqMarketDataType(3)
-        ib.sleep(3)
-        price = ticker.marketPrice()
+    for row in results:
+        if row.get("conid") and (row.get("symbol") or "").upper() == symbol.upper():
+            return int(row["conid"]), row.get("companyName") or row.get("companyHeader") or ""
 
-    if price != price or price <= 0:
-        price = ticker.close
+    first = results[0]
+    if not first.get("conid"):
+        raise GatewayError(f"No usable contract id for symbol '{symbol}'.")
+    return int(first["conid"]), first.get("companyName") or ""
 
-    ib.cancelMktData(contract)
 
-    if price is None or price != price or price <= 0:
+def parse_price(raw):
+    """IB prefixes snapshot values, e.g. 'C12.34' (previous close) or 'H12.34' (halted)."""
+    if raw is None:
         return None
-    return float(price)
+    text = str(raw).strip().lstrip("CHBAtc").replace(",", "")
+    try:
+        value = float(text)
+    except ValueError:
+        return None
+    return value if value > 0 else None
 
 
-def build_order(args, price):
-    """Requirement 5: default to a limit that rests away from the market."""
+def get_price(api, conid):
+    """Requirement 5: the first snapshot call often returns an empty shell, so ask twice."""
+    snapshot = None
+    for _ in range(4):
+        snapshot = api.get("iserver/marketdata/snapshot",
+                           params={"conids": str(conid), "fields": SNAPSHOT_FIELDS})
+        if snapshot and any(field in snapshot[0] for field in ("31", "84", "86", "7296")):
+            break
+        time.sleep(1.5)
+
+    if not snapshot:
+        return None
+
+    row = snapshot[0]
+    for field in ("31", "7296", "84", "86"):  # last, close, bid, ask
+        price = parse_price(row.get(field))
+        if price:
+            return price
+    return None
+
+
+def build_order(args, conid, price):
+    """Requirement 6: default to a limit that rests away from the market."""
+    order = {
+        "conid": conid,
+        "orderType": args.order_type,
+        "side": args.action,
+        "quantity": args.quantity,
+        "tif": "DAY",
+        "outsideRTH": args.outside_rth,
+        "cOID": f"test-{int(time.time())}",
+    }
+
     if args.order_type == "MKT":
-        order = MarketOrder(args.action, args.quantity)
         print(f"Order: MARKET {args.action} {args.quantity} {args.symbol} -- this is expected to FILL.")
-    else:
-        if args.limit_price is not None:
-            limit = args.limit_price
-        elif price is None:
-            sys.exit("Error: no price available for the default limit. Pass --limit-price explicitly.")
-        else:
-            factor = (1 - args.offset_pct / 100) if args.action == "BUY" else (1 + args.offset_pct / 100)
-            limit = round(price * factor, 2)
-        order = LimitOrder(args.action, args.quantity, limit)
-        print(f"Order: LIMIT {args.action} {args.quantity} {args.symbol} @ {limit:.2f}"
-              f"{'' if args.limit_price is not None else f' ({args.offset_pct:g}% away from {price:.2f})'}")
+        return order
 
-    order.account = args.account
-    order.outsideRth = args.outside_rth
-    order.tif = "DAY"
+    if args.limit_price is not None:
+        limit = args.limit_price
+    elif price is None:
+        sys.exit("Error: no price available for the default limit. Pass --limit-price explicitly.")
+    else:
+        factor = (1 - args.offset_pct / 100) if args.action == "BUY" else (1 + args.offset_pct / 100)
+        limit = round(price * factor, 2)
+
+    order["price"] = limit
+    detail = "" if args.limit_price is not None else f" ({args.offset_pct:g}% away from {price:.2f})"
+    print(f"Order: LIMIT {args.action} {args.quantity} {args.symbol} @ {limit:.2f}{detail}")
     return order
 
 
-def is_set(value):
-    """IB leaves unset doubles at DBL_MAX (1.79e308); treat those and NaN as missing."""
-    return value is not None and value == value and abs(value) < 1e300
+def answer_confirmations(api, response, max_replies=5):
+    """Requirement 7: the gateway returns confirmation prompts that must be replied to."""
+    for _ in range(max_replies):
+        if not isinstance(response, list) or not response:
+            return response
+        first = response[0]
+        if not isinstance(first, dict) or "id" not in first or "message" not in first:
+            return response
+        for line in first.get("message", []):
+            print(f"  gateway asks: {line}")
+        response = api.post(f"iserver/reply/{first['id']}", json={"confirmed": True})
+        print("  replied: confirmed")
+    return response
 
 
-def run_what_if(ib, contract, order):
-    """Requirement 6: margin and commission impact, without sending the order."""
+def run_what_if(api, account, order):
+    """Requirement 8: margin and commission impact, without sending the order."""
     print("\n--what-if: asking IB for the impact of this order (nothing will be placed).")
-    state = ib.whatIfOrder(contract, order)
-    if not state:
-        print("  IB returned no what-if state (the order may have been rejected as invalid).")
+    result = api.post(f"iserver/account/{account}/orders/whatif", json={"orders": [order]})
+    if not isinstance(result, dict):
+        print(f"  Unexpected what-if payload: {result!r}")
         return
-    for label, value in (
-        ("Status", state.status),
-        ("Initial margin change", state.initMarginChange),
-        ("Maintenance margin change", state.maintMarginChange),
-        ("Equity with loan change", state.equityWithLoanChange),
-        ("Commission", f"{state.commission} {state.commissionCurrency}" if is_set(state.commission) else ""),
-        ("Warning", state.warningText),
-    ):
-        if value:
-            print(f"  {label:<26} {value}")
+
+    if result.get("error"):
+        print(f"  Rejected: {result['error']}")
+        return
+
+    amount = result.get("amount") or {}
+    for label, key in (("Order value", "amount"), ("Commission", "commission"), ("Total", "total")):
+        if amount.get(key):
+            print(f"  {label:<26} {amount[key]}")
+
+    for label, key in (("Initial margin", "initial"), ("Maintenance margin", "maintenance")):
+        section = result.get(key) or {}
+        if section.get("change"):
+            print(f"  {label + ' change':<26} {section['change']}")
+
+    for warning in (result.get("warn"), result.get("warning")):
+        if warning:
+            print(f"  Warning: {warning}")
 
 
-def place_and_watch(ib, contract, order, args):
-    """Requirement 7: place, report each status transition, then cancel unless --keep."""
-    trade = ib.placeOrder(contract, order)
-    print(f"\nOrder submitted at {datetime.now(ET):%Y-%m-%d %H:%M:%S %Z}.")
+def place_and_watch(api, account, order, args):
+    """Requirement 9: place, report status, then cancel unless --keep."""
+    response = api.post(f"iserver/account/{account}/orders", json={"orders": [order]})
+    response = answer_confirmations(api, response)
+
+    if isinstance(response, dict) and response.get("error"):
+        sys.exit(f"Order rejected: {response['error']}")
+    if not isinstance(response, list) or not response:
+        sys.exit(f"Unexpected order response: {response!r}")
+
+    placed = response[0]
+    order_id = placed.get("order_id") or placed.get("orderId")
+    if not order_id:
+        sys.exit(f"Order response carried no order id: {placed!r}")
+
+    print(f"\nOrder submitted at {datetime.now(ET):%Y-%m-%d %H:%M:%S %Z}. order_id={order_id}")
 
     seen = set()
-    for _ in range(args.wait * 2):
-        ib.sleep(0.5)
-        status = trade.orderStatus.status
-        if status not in seen:
-            seen.add(status)
-            print(f"  status: {status:<16} filled={trade.orderStatus.filled} "
-                  f"remaining={trade.orderStatus.remaining} avgFill={trade.orderStatus.avgFillPrice}")
-        if trade.isDone():
+    status = placed.get("order_status", "")
+    deadline = time.time() + args.wait
+    while time.time() < deadline:
+        try:
+            detail = api.get(f"iserver/account/order/status/{order_id}")
+        except GatewayError as exc:
+            print(f"  (status poll failed: {exc})")
             break
 
-    print(f"  IB order id: {trade.order.orderId}, perm id: {trade.order.permId}")
-    for entry in trade.log:
-        print(f"  log: {entry.time:%H:%M:%S} {entry.status} {entry.message or ''}".rstrip())
+        status = (detail or {}).get("order_status", status)
+        if status not in seen:
+            seen.add(status)
+            print(f"  status: {status:<16} filled={detail.get('cum_fill')} "
+                  f"size={detail.get('total_size')} avgFill={detail.get('average_price')}")
+        if status in ("Filled", "Cancelled", "ApiCancelled", "Rejected", "Inactive"):
+            break
+        time.sleep(1)
 
-    if trade.orderStatus.status == "Filled":
-        print(f"FILLED {trade.orderStatus.filled} @ {trade.orderStatus.avgFillPrice}")
-        for fill in trade.fills:
-            comm = fill.commissionReport
-            detail = (f" commission {comm.commission} {comm.currency}"
-                      if is_set(comm.commission) else "")
-            print(f"  fill {fill.execution.shares} @ {fill.execution.price}{detail}")
+    if status == "Filled":
+        print(f"FILLED. Check the position below.")
         return
-
-    if trade.isDone():
-        print(f"Order finished as {trade.orderStatus.status}.")
+    if status in ("Cancelled", "ApiCancelled", "Rejected", "Inactive"):
+        print(f"Order finished as {status}.")
         return
 
     if args.keep:
-        print("Order left working (--keep). Cancel it in TWS when you are done.")
+        print("Order left working (--keep). Cancel it in Client Portal when you are done.")
         return
 
     print("Cancelling the test order ...")
-    ib.cancelOrder(trade.order)
-    for _ in range(20):
-        ib.sleep(0.5)
-        if trade.orderStatus.status in ("Cancelled", "ApiCancelled", "Filled"):
-            break
-    print(f"Final status: {trade.orderStatus.status}")
+    try:
+        cancelled = api.delete(f"iserver/account/{account}/order/{order_id}")
+        print(f"  cancel response: {cancelled}")
+    except GatewayError as exc:
+        print(f"  cancel failed: {exc}")
 
 
 def main():
     args = parse_args()
-    port = resolve_port(args)
+    api = IBWebAPI(args.url)
+    print(f"Gateway: {api.base_url}")
 
-    ib = IB()
-    connect(ib, args.host, port, args.client_id)
     try:
-        args.account = choose_account(ib, args.account)
-        guard_live_account(ib, args.account, args.live)
-        show_account(ib, args.account)
+        check_auth(api)
+        account = choose_account(api, args.account)
+        guard_live_account(account, args.live, dry_run=args.what_if)
+        show_account(api, account)
 
-        contract = Stock(args.symbol, "SMART", "USD")
-        if not ib.qualifyContracts(contract):
-            sys.exit(f"Error: IB could not resolve symbol '{args.symbol}' as a US stock.")
-        print(f"\nContract: {contract.symbol} conId={contract.conId} "
-              f"exchange={contract.exchange} primary={contract.primaryExchange}")
+        conid, name = find_conid(api, args.symbol)
+        print(f"\nContract: {args.symbol} conid={conid} {name}")
 
-        price = get_price(ib, contract)
+        price = get_price(api, conid)
         print(f"Price: {price:.2f}" if price else "Price: unavailable (market closed or no data permission)")
 
-        order = build_order(args, price)
+        order = build_order(args, conid, price)
 
         if args.what_if:
-            run_what_if(ib, contract, order)
+            run_what_if(api, account, order)
         else:
-            place_and_watch(ib, contract, order, args)
+            place_and_watch(api, account, order, args)
 
-        print("\nOpen orders now:", ib.reqOpenOrders() or "none")
-        positions = [p for p in ib.positions(args.account) if p.contract.symbol == args.symbol]
-        print(f"Position in {args.symbol}:", positions or "none")
-    finally:
-        ib.disconnect()
-        print("Disconnected.")
+        live_orders = api.get("iserver/account/orders") or {}
+        working = [o for o in live_orders.get("orders", [])
+                   if o.get("status") not in ("Filled", "Cancelled", "Inactive")]
+        print("\nWorking orders now:", working or "none")
+
+        positions = api.get(f"portfolio/{account}/positions/0") or []
+        mine = [p for p in positions if p.get("conid") == conid]
+        print(f"Position in {args.symbol}:", mine or "none")
+    except GatewayError as exc:
+        sys.exit(f"\nError: {exc}")
 
 
 if __name__ == "__main__":

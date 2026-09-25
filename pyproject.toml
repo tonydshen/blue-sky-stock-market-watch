@@ -11,5 +11,6 @@ dependencies = [
     "ib-async>=2.1.0",
     "python-dotenv>=1.2.2",
     "reportlab>=5.0.0",
+    "requests>=2.34.2",
     "yfinance>=1.4.1",
 ]

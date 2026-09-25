@@ -87,6 +87,7 @@ dependencies = [
     { name = "ib-async" },
     { name = "python-dotenv" },
     { name = "reportlab" },
+    { name = "requests" },
     { name = "yfinance" },
 ]
 
@@ -98,6 +99,7 @@ requires-dist = [
     { name = "ib-async", specifier = ">=2.1.0" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "reportlab", specifier = ">=5.0.0" },
+    { name = "requests", specifier = ">=2.34.2" },
     { name = "yfinance", specifier = ">=1.4.1" },
 ]
 
