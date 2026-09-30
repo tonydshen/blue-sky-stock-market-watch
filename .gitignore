@@ -44,5 +44,8 @@ yarn-error.*
 
 # Ignore what is listed below for blue-sky-stock-market-watch
 config/output
+config/log
+config/users
+welcome.php
 __pycache__/
 *:Zone.Identifier
