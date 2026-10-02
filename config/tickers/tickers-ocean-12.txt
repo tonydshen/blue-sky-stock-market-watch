@@ -1,3 +1,4 @@
+AI Sector
 AAPL|Apple Inc.|Information Technology|$4.91T|Mega
 AMD|Advanced Micro Devices, Inc.|Information Technology|$913.89B|Mega
 AMZN|Amazon.com, Inc.|Consumer Discretionary|$2.74T|Mega
