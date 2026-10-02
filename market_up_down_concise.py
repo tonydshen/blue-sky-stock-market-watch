@@ -116,8 +116,23 @@
 # as "company" and into the HTML as a sortable Company column capped at 24
 # characters wide (about 80% of the names in config/tickers fit); a longer
 # name is cut with an ellipsis and shown in full on hover.
+#
+# Concise version requirements, 10/02/2026:
+# 1. market_range_vol.sh -l runs several tickers files back to back, and runs
+#    in the same minute overwrote each other's reports (same timestamp). Make
+#    the output file names (CSV and HTML) distinct per tickers file.
+#
+# Revised on 10/02/2026: implemented requirement 1 above. The output names now
+# carry a tag from the tickers file name after the timestamp, e.g.
+# market-up-down-concise-202610021015-energy.csv/.html for tickers-energy.txt.
+# The tickers file name is used rather than its sector title line because it
+# is always present and unique within a list, while titles are optional and
+# can repeat (tickers-ai.txt and tickers-ocean-12.txt are both "AI Sector").
+# The timestamp stays first so the files still sort by time and still match
+# market_range_vol.sh's market-up-down-concise-[0-9]*.html.
 
 import os
+import re
 import sys
 import csv
 import html
@@ -1137,6 +1152,17 @@ def render_html_report(
 """
 
 
+def report_tag(tickers_path):
+    """A file-name-safe tag for the tickers file, used in the output names:
+    the name without ".txt" and a leading "tickers-", lowercased, with runs of
+    anything but letters and digits turned into "-" (tickers-nasdaq100+sndk.txt
+    -> nasdaq100-sndk)."""
+    stem = os.path.splitext(os.path.basename(tickers_path))[0]
+    if stem.startswith("tickers-"):
+        stem = stem[len("tickers-"):]
+    return re.sub(r"[^a-z0-9]+", "-", stem.lower()).strip("-") or "tickers"
+
+
 def main():
     query, start_date, end_date, tickers_path = parse_args(sys.argv)
     entries, sector_title = read_tickers(tickers_path)
@@ -1151,8 +1177,11 @@ def main():
 
     output_dir = os.getenv("OUTPUT_PATH")
     timestamp = datetime.now().strftime("%Y%m%d%H%M")
-    output_path = os.path.join(output_dir, f"market-up-down-concise-{timestamp}.csv")
-    html_output_path = os.path.join(output_dir, f"market-up-down-concise-{timestamp}.html")
+    # The tickers-file tag keeps reports from different files distinct when
+    # market_range_vol.sh -l runs several in the same minute.
+    base_name = f"market-up-down-concise-{timestamp}-{report_tag(tickers_path)}"
+    output_path = os.path.join(output_dir, f"{base_name}.csv")
+    html_output_path = os.path.join(output_dir, f"{base_name}.html")
 
     header = [
         "symbol",

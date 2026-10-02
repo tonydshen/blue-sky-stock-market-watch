@@ -36,6 +36,10 @@
 #       - Add optional commandline argument -u to define users file. If not given, defaults $USERS_PATH/users.txt, $USERS_PATH is defined in .env.
 #       - Add optional commandline argument -m. If not given, defaults to what the remote server uses to send emails (postfix, see welcome.php). If -m no is given, skip email and write messages to a log file indicating what is done.
 #     Implemented 2026-09-30.
+#   2026-10-02: market_up_down_concise.py now names its reports
+#       market-up-down-concise-YYYYMMDDHHMM-<tickers tag>.html (e.g. -energy), so
+#       -l runs that finish in the same minute no longer overwrite each other.
+#       The timestamp is read from the first 12 characters after the prefix.
 #
 set -e
 
@@ -82,7 +86,7 @@ if [ -n "$TICKERS_LIST_FILE" ] && [ "$F_GIVEN" -eq 1 ]; then
 fi
 
 # Per-script settings. To support another report script, add a case here:
-#   REPORT_PREFIX  its output file name prefix (<prefix>YYYYMMDDHHMM.html)
+#   REPORT_PREFIX  its output file name prefix (<prefix>YYYYMMDDHHMM[-<tag>].html)
 #   RUN_ANALYSIS   1 to run both market_analysis.py passes after it
 #   SEND_EMAIL     1 to email the new report link(s) to the users file
 #   LABEL_SUFFIX   appended to the link text on the links page
@@ -222,7 +226,9 @@ fi
 
 REPORT_NAME=$(basename "$NEW_REPORT")
 TIMESTAMP=${REPORT_NAME#"$REPORT_PREFIX"}
-TIMESTAMP=${TIMESTAMP%.html}
+# the concise report adds "-<tickers tag>" after the timestamp; keep just the
+# 12 timestamp digits
+TIMESTAMP=${TIMESTAMP:0:12}
 YEAR=${TIMESTAMP:0:4}
 MONTH=${TIMESTAMP:4:2}
 DAY=${TIMESTAMP:6:2}
