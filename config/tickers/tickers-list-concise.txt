@@ -1,5 +1,5 @@
 tickers-energy.txt
 tickers-health.txt
-tickers-ocean-12.txt
+tickers-ai.txt
 tickers-chinese-interested-stocks.txt
 tickers-nasdaq100+sndk.txt
