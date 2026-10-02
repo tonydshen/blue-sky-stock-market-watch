@@ -11,22 +11,31 @@
 # ANTHROPIC_API_KEY in .env, matching whichever provider --model selects.
 #
 # Usage:
-#   uv run market_analysis.py --model <model> [-t <timestamp>] [--prompt-file <name>]
+#   uv run market_analysis.py --model <model> [-t <report ID>] [--prompt-file <name>]
 #
 #   --model         required; a Gemini model (e.g. gemini-2.5-pro) or a
 #                   Claude model (e.g. claude-opus-5) -- provider is
 #                   detected from the name.
-#   -t, --timestamp optional; the YYYYMMDDHHMM timestamp of an existing
-#                   market-up-down-*.csv report in OUTPUT_PATH. Defaults to
-#                   the most recent report found there.
+#   -t, --timestamp optional; the report ID of an existing
+#                   market-up-down-<ID>.csv report in OUTPUT_PATH, e.g.
+#                   202610021015-energy. A bare YYYYMMDDHHMM timestamp also
+#                   works when it names exactly one report (always so for
+#                   reports from before 10/02/2026, which have no tag).
+#                   Defaults to the most recently written report there.
 #   --prompt-file   optional; name of a macro-context prompt file in
 #                   config/prompts (file name only, no path). Defaults to
 #                   PROMPT_FILE from .env if set, otherwise a built-in
 #                   generic macro/sector-rotation prompt.
 #
-# Output: config/output/market-analysis-YYYYMMDDHHMM.html -- same timestamp
-# as the report it analyzes, which is how the main report's analysis link
-# finds it.
+# Output: config/output/market-analysis-<ID>.html -- same report ID as the
+# report it analyzes, which is how the main report's analysis link finds it
+# (plus a market-analysis-<ID>-<model>.html copy per model).
+#
+# Revised on 10/02/2026: reports are now identified by a report ID (timestamp
+# plus a tickers-file tag, see market_up_down.report_tag) instead of the bare
+# timestamp, so runs of different tickers files in the same minute don't share
+# file names; -t takes the ID, and the default picks the newest report by
+# modification time since IDs from the same minute don't sort by run order.
 import os
 import re
 import sys
@@ -68,11 +77,12 @@ DEFAULT_MACRO_PROMPT = (
 )
 
 USAGE = (
-    "Usage: uv run market_analysis.py --model <model> [-t <timestamp>] [--prompt-file <name>]\n"
+    "Usage: uv run market_analysis.py --model <model> [-t <report ID>] [--prompt-file <name>]\n"
     "  --model         required; a Gemini model (e.g. gemini-2.5-pro) or a Claude model\n"
     "                  (e.g. claude-opus-5) -- provider is detected from the name.\n"
-    "  -t, --timestamp optional; YYYYMMDDHHMM of an existing market-up-down-*.csv report\n"
-    "                  in OUTPUT_PATH. Defaults to the most recent report found.\n"
+    "  -t, --timestamp optional; report ID of an existing market-up-down-<ID>.csv report\n"
+    "                  in OUTPUT_PATH, e.g. 202610021015-energy, or a bare YYYYMMDDHHMM\n"
+    "                  that names exactly one report. Defaults to the newest report.\n"
     "  --prompt-file   optional; name of a macro-context prompt file in config/prompts\n"
     "                  (file name only, no path). Defaults to PROMPT_FILE from .env, or a\n"
     "                  built-in generic prompt.\n"
@@ -145,14 +155,45 @@ def usage_error(message):
     sys.exit(2)
 
 
-def find_latest_timestamp(output_dir):
-    """Return the timestamp of the most recent market-up-down-*.csv report, or None."""
-    candidates = []
+# A full report's CSV name: market-up-down-<ID>.csv, where the ID is a
+# YYYYMMDDHHMM timestamp optionally followed by "-<tickers tag>" (untagged
+# before 10/02/2026). Concise reports (market-up-down-concise-...) don't match.
+REPORT_CSV_RE = re.compile(r"market-up-down-(\d{12}(?:-[a-z0-9-]+)?)\.csv$")
+
+
+def list_report_ids(output_dir):
+    """Return {report ID: CSV path} for every full report in output_dir."""
+    reports = {}
     for path in glob.glob(os.path.join(output_dir, "market-up-down-*.csv")):
-        m = re.match(r"market-up-down-(\d{12})\.csv$", os.path.basename(path))
+        m = REPORT_CSV_RE.match(os.path.basename(path))
         if m:
-            candidates.append(m.group(1))
-    return max(candidates) if candidates else None
+            reports[m.group(1)] = path
+    return reports
+
+
+def find_latest_report_id(output_dir):
+    """Return the ID of the most recently written report, or None. Goes by
+    modification time: IDs from the same minute differ only by tag, which
+    says nothing about which ran last."""
+    reports = list_report_ids(output_dir)
+    if not reports:
+        return None
+    return max(reports, key=lambda report_id: os.path.getmtime(reports[report_id]))
+
+
+def resolve_report_id(output_dir, value):
+    """Return the report ID that -t `value` names: the ID itself, or a bare
+    YYYYMMDDHHMM timestamp shared by exactly one report. Exits with a usage
+    error when it names none or several."""
+    reports = list_report_ids(output_dir)
+    if value in reports:
+        return value
+    matches = sorted(report_id for report_id in reports if report_id.startswith(f"{value}-"))
+    if len(matches) == 1:
+        return matches[0]
+    if matches:
+        usage_error(f"-t {value} matches several reports; give one of: {', '.join(matches)}")
+    usage_error(f"report not found: {os.path.join(output_dir, f'market-up-down-{value}.csv')}")
 
 
 def read_report_rows(csv_path):
@@ -467,25 +508,27 @@ def main():
                          help="Model to use: a Gemini model (e.g. gemini-2.5-pro) or a Claude model "
                               "(e.g. claude-opus-5) -- provider is detected from the name")
     parser.add_argument("-t", "--timestamp", type=str, default=None,
-                         help="YYYYMMDDHHMM of an existing market-up-down report; defaults to the most recent one")
+                         help="report ID of an existing market-up-down report (e.g. 202610021015-energy), "
+                              "or a bare YYYYMMDDHHMM naming exactly one; defaults to the newest one")
     parser.add_argument("--prompt-file", type=str, default=None,
                          help="Name of a macro-context prompt file in config/prompts (file name only)")
     args = parser.parse_args()
 
     output_dir = os.getenv("OUTPUT_PATH")
-    timestamp = args.timestamp or find_latest_timestamp(output_dir)
-    if timestamp is None:
-        usage_error(f"no market-up-down-*.csv reports found in {output_dir}")
+    if args.timestamp:
+        report_id = resolve_report_id(output_dir, args.timestamp)
+    else:
+        report_id = find_latest_report_id(output_dir)
+        if report_id is None:
+            usage_error(f"no market-up-down-*.csv reports found in {output_dir}")
 
-    csv_path = os.path.join(output_dir, f"market-up-down-{timestamp}.csv")
-    if not os.path.isfile(csv_path):
-        usage_error(f"report not found: {csv_path}")
+    csv_path = os.path.join(output_dir, f"market-up-down-{report_id}.csv")
 
-    main_report_html = f"market-up-down-{timestamp}.html"
+    main_report_html = f"market-up-down-{report_id}.html"
     # market_up_down.py drops the sector title here (see
     # write_sector_title_sidecar) when the tickers file had one, keyed by the
-    # same timestamp as the report itself.
-    sector_title_path = os.path.join(output_dir, f"market-up-down-{timestamp}.sector-title.txt")
+    # same report ID as the report itself.
+    sector_title_path = os.path.join(output_dir, f"market-up-down-{report_id}.sector-title.txt")
     report_title = "Blue Sky Stock Volatility Report"
     if os.path.isfile(sector_title_path):
         with open(sector_title_path) as f:
@@ -494,11 +537,11 @@ def main():
             report_title = f"Blue Sky {sector_title} Stock Volatility Report"
 
     model_slug = slugify_model(args.model)
-    analysis_html_path = os.path.join(output_dir, f"market-analysis-{timestamp}-{model_slug}.html")
+    analysis_html_path = os.path.join(output_dir, f"market-analysis-{report_id}-{model_slug}.html")
     # The main report's "read report analysis" link always points at this
     # unsuffixed name (it's generated before any model is chosen); keep it
     # working by refreshing it with whichever model's analysis ran last.
-    latest_analysis_html_path = os.path.join(output_dir, f"market-analysis-{timestamp}.html")
+    latest_analysis_html_path = os.path.join(output_dir, f"market-analysis-{report_id}.html")
 
     rows = read_report_rows(csv_path)
     if not rows:

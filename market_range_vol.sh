@@ -40,6 +40,10 @@
 #       market-up-down-concise-YYYYMMDDHHMM-<tickers tag>.html (e.g. -energy), so
 #       -l runs that finish in the same minute no longer overwrite each other.
 #       The timestamp is read from the first 12 characters after the prefix.
+#   2026-10-02 (later): market_up_down.py follows the same convention, and its
+#       report ID (YYYYMMDDHHMM-<tickers tag>) is passed to both
+#       market_analysis.py runs with -t instead of leaving them to pick the
+#       most recent report; the sector-title sidecar is looked up by that ID.
 #
 set -e
 
@@ -86,7 +90,8 @@ if [ -n "$TICKERS_LIST_FILE" ] && [ "$F_GIVEN" -eq 1 ]; then
 fi
 
 # Per-script settings. To support another report script, add a case here:
-#   REPORT_PREFIX  its output file name prefix (<prefix>YYYYMMDDHHMM[-<tag>].html)
+#   REPORT_PREFIX  its output file name prefix (<prefix><report ID>.html, the
+#                  ID being YYYYMMDDHHMM-<tickers tag>)
 #   RUN_ANALYSIS   1 to run both market_analysis.py passes after it
 #   SEND_EMAIL     1 to email the new report link(s) to the users file
 #   LABEL_SUFFIX   appended to the link text on the links page
@@ -178,6 +183,18 @@ run_pipeline() {
 local TICKERS_FILE="$1"
 uv run "$REPORT_SCRIPT" -p "$PERIOD" -f "$TICKERS_FILE"
 
+# the report this run just produced is the newest <prefix><report ID>.html in
+# SOURCE_DIR (the [0-9] keeps market-up-down- from matching the concise files)
+NEW_REPORT=$(ls -t "$SOURCE_DIR"/${REPORT_PREFIX}[0-9]*.html 2>/dev/null | head -n 1)
+if [ -z "$NEW_REPORT" ]; then
+    echo "Error: no ${REPORT_PREFIX}*.html file found in $SOURCE_DIR" >&2
+    exit 1
+fi
+REPORT_NAME=$(basename "$NEW_REPORT")
+# report ID: YYYYMMDDHHMM-<tickers tag>, e.g. 202610021015-energy
+REPORT_ID=${REPORT_NAME#"$REPORT_PREFIX"}
+REPORT_ID=${REPORT_ID%.html}
+
 if [ "$RUN_ANALYSIS" -eq 1 ]; then
 # When the tickers file has a sector title (see read_tickers in
 # market_up_down.py), market_up_down.py writes a sector-focused macro prompt
@@ -191,8 +208,10 @@ if [ -s "$SECTOR_PROMPT_POINTER" ]; then
     PROMPT_ARGS=(--prompt-file "$(cat "$SECTOR_PROMPT_POINTER")")
 fi
 
-uv run market_analysis.py --model gemini-2.5-pro "${PROMPT_ARGS[@]}"
-uv run market_analysis.py --model claude-opus-5 "${PROMPT_ARGS[@]}"
+# -t names this run's report, so the analysis never lands on another report
+# written in the same minute
+uv run market_analysis.py --model gemini-2.5-pro -t "$REPORT_ID" "${PROMPT_ARGS[@]}"
+uv run market_analysis.py --model claude-opus-5 -t "$REPORT_ID" "${PROMPT_ARGS[@]}"
 fi
 # copy html pages from source to target
 cp "$SOURCE_DIR"/*.html "$TARGET_DIR"
@@ -212,23 +231,13 @@ cp "$SOURCE_DIR"/*.html "$TARGET_DIR"
 #    <table>
 #            <tr>
 
-# the report this run just produced is the newest <prefix>YYYYMMDDHHMM.html in
-# SOURCE_DIR (the [0-9] keeps market-up-down- from matching the concise files)
-NEW_REPORT=$(ls -t "$SOURCE_DIR"/${REPORT_PREFIX}[0-9]*.html 2>/dev/null | head -n 1)
-if [ -z "$NEW_REPORT" ]; then
-    echo "Error: no ${REPORT_PREFIX}*.html file found in $SOURCE_DIR" >&2
-    exit 1
-fi
 if [ ! -f "$LINKS_FILE" ]; then
     echo "Error: links file not found: $LINKS_FILE" >&2
     exit 1
 fi
 
-REPORT_NAME=$(basename "$NEW_REPORT")
-TIMESTAMP=${REPORT_NAME#"$REPORT_PREFIX"}
-# the concise report adds "-<tickers tag>" after the timestamp; keep just the
-# 12 timestamp digits
-TIMESTAMP=${TIMESTAMP:0:12}
+# the report ID starts with the 12 timestamp digits
+TIMESTAMP=${REPORT_ID:0:12}
 YEAR=${TIMESTAMP:0:4}
 MONTH=${TIMESTAMP:4:2}
 DAY=${TIMESTAMP:6:2}
@@ -237,14 +246,14 @@ MINUTE=${TIMESTAMP:10:2}
 LINK_DATE=$(date -d "${YEAR}-${MONTH}-${DAY} ${HOUR}:${MINUTE}" +"%H:%M, %B %-d, %Y")
 
 # market_up_down.py drops the tickers file's sector title (see
-# write_sector_title_sidecar) here, keyed by this run's timestamp, when the
+# write_sector_title_sidecar) here, keyed by this run's report ID, when the
 # tickers file had one -- e.g. "Energy Sector" for tickers-energy.txt. Work it
 # into the link text the same way it's worked into the report titles.
 # market_up_down_concise.py writes no sidecar, so for it the sector title is
 # recovered from the page title instead: "Blue Sky <sector> Stock Volatility
 # Report (Concise)" (see render_report_html in market_up_down_concise.py).
 SECTOR_TITLE=""
-SECTOR_TITLE_FILE="$SOURCE_DIR/${REPORT_PREFIX}${TIMESTAMP}.sector-title.txt"
+SECTOR_TITLE_FILE="$SOURCE_DIR/${REPORT_PREFIX}${REPORT_ID}.sector-title.txt"
 if [ -s "$SECTOR_TITLE_FILE" ]; then
     SECTOR_TITLE=$(cat "$SECTOR_TITLE_FILE")
 elif [ "$REPORT_SCRIPT" = market_up_down_concise.py ]; then

@@ -59,8 +59,21 @@
 # as a sortable Company column capped at 24 characters wide (about 80% of the
 # names in config/tickers fit); a longer name is cut with an ellipsis and
 # shown in full on hover.
+#
+# Additional requirements, 10/02/2026:
+# 1. Use the same output file naming convention as market_up_down_concise.py,
+#    so runs of different tickers files in the same minute (market_range_vol.sh
+#    -l) don't overwrite each other's reports.
+#
+# Revised on 10/02/2026: implemented requirement 1 above. Each run has a report
+# ID -- the timestamp plus a tag from the tickers file name, e.g.
+# 202610021015-energy for tickers-energy.txt -- used in every file it writes:
+# market-up-down-<ID>.csv/.html, market-up-down-<ID>.sector-title.txt and the
+# market-analysis-<ID>.html the report links to. market_analysis.py takes the
+# same ID with -t.
 
 import os
+import re
 import sys
 import csv
 import html
@@ -258,12 +271,23 @@ def write_sector_prompt_file(sector_title, timestamp):
     return filename
 
 
-def write_sector_title_sidecar(output_dir, timestamp, sector_title):
+def report_tag(tickers_path):
+    """A file-name-safe tag for the tickers file, used in the report ID: the
+    name without ".txt" and a leading "tickers-", lowercased, with runs of
+    anything but letters and digits turned into "-" (tickers-nasdaq100+sndk.txt
+    -> nasdaq100-sndk). Same rule as market_up_down_concise.report_tag."""
+    stem = os.path.splitext(os.path.basename(tickers_path))[0]
+    if stem.startswith("tickers-"):
+        stem = stem[len("tickers-"):]
+    return re.sub(r"[^a-z0-9]+", "-", stem.lower()).strip("-") or "tickers"
+
+
+def write_sector_title_sidecar(output_dir, report_id, sector_title):
     """Write the sector title next to this run's CSV/HTML report, keyed by the
-    same timestamp, so market_analysis.py can pick it up for its own report
+    same report ID, so market_analysis.py can pick it up for its own report
     title (e.g. "Blue Sky Health Sector Stock Volatility Report") without
     depending on run order the way the prompt-file pointer does."""
-    path = os.path.join(output_dir, f"market-up-down-{timestamp}.sector-title.txt")
+    path = os.path.join(output_dir, f"market-up-down-{report_id}.sector-title.txt")
     with open(path, "w") as f:
         f.write(sector_title)
 
@@ -1021,13 +1045,16 @@ def main():
 
     output_dir = os.getenv("OUTPUT_PATH")
     timestamp = datetime.now().strftime("%Y%m%d%H%M")
-    output_path = os.path.join(output_dir, f"market-up-down-{timestamp}.csv")
-    html_output_path = os.path.join(output_dir, f"market-up-down-{timestamp}.html")
-    analysis_filename = f"market-analysis-{timestamp}.html"
+    # The tickers-file tag keeps reports from different files distinct when
+    # market_range_vol.sh -l runs several in the same minute.
+    report_id = f"{timestamp}-{report_tag(tickers_path)}"
+    output_path = os.path.join(output_dir, f"market-up-down-{report_id}.csv")
+    html_output_path = os.path.join(output_dir, f"market-up-down-{report_id}.html")
+    analysis_filename = f"market-analysis-{report_id}.html"
 
     sector_prompt_filename = None
     if sector_title:
-        write_sector_title_sidecar(output_dir, timestamp, sector_title)
+        write_sector_title_sidecar(output_dir, report_id, sector_title)
         prompt_timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         sector_prompt_filename = write_sector_prompt_file(sector_title, prompt_timestamp)
         if sector_prompt_filename:
