@@ -6,6 +6,9 @@
 #   Implemented the requirements
 # Revised on 09/20/2026
 #   Added -m/-o merge mode (Requirements 09/20/2026 below)
+# Revised on 10/02/2026
+#   -f now also fills in the missing fields of partly populated lines
+#   (Requirements 10/02/2026 below)
 # Requirements
 # 1. Read input tickers from a file in config/tickers, defaulting to the file named by TICKERS_FILE in .env.
 # 2. If the input file has only ticker symbols and is not vertical bar delimnited, add two more fields to the file, delimited by vertical bars.
@@ -23,12 +26,18 @@
 #   AAPL
 # becomes
 #   AAPL|Apple Inc.|Information Technology|$4.92T|Mega
-# Only bare-symbol lines are looked up and filled in; a line that already has
-# "|" fields is kept exactly as is. So after a symbol is appended to an
-# already-populated file, re-running the script fills in just that new line.
+# A partly populated line is completed the same way: one with fewer than the
+# five fields, or with any of them blank, is looked up and only its missing
+# fields are filled in -- a value already on the line (e.g. a company name
+# typed by hand) is never replaced. So
+#   BE|BLOOM ENERGY CORP A
+# becomes
+#   BE|BLOOM ENERGY CORP A|Industrials|$81.75B|Large
+# A complete line is kept exactly as is, so after a symbol is appended to an
+# already-populated file, re-running the script looks up just that new line.
 # Line order, blank lines and an optional leading sector title line (e.g.
 # "Health Sector", see market_up_down.read_tickers) are preserved. A file with
-# no bare-symbol lines is left untouched.
+# no incomplete lines is left untouched.
 #
 # Company name, sector and market cap come from Yahoo Finance (yfinance Ticker.info). Yahoo's
 # sector names map one-to-one onto the 11 GICS sectors (GICS_SECTORS below), so
@@ -54,6 +63,10 @@
 # 5. If the -o argument is not provided, the default output file name is "merged-tickers.txt" in the config/tickers folder.
 # 6. The merged file should not have duplicate tickers. If a ticker appears in multiple input files, only the first occurrence is kept in the output file.
 # 7. The merged output file is sorted by ticker symbol.
+# Requirements 10/02/2026
+# 1. With -f <filename>, detect lines with missing fields (company name, sector, market cap or
+#    market cap category) and populate the file with the missing data accordingly.
+#    Example file: tickers-energy.txt, whose lines carry only "SYMBOL|Company Name".
 import os
 import sys
 import yfinance as yf
@@ -213,6 +226,22 @@ def is_bare_symbol(text):
     return bool(text) and "|" not in text and not is_comment_line(text) and not is_title_line(text)
 
 
+# Fields of a populated line: symbol, company, sector, market cap, category.
+FIELD_COUNT = 5
+
+
+def needs_fill(text, fill_partial):
+    """True for a line that needs a lookup: a bare symbol, or -- when
+    `fill_partial` -- a "|" line with fewer than FIELD_COUNT fields or any of
+    them blank. Titles, comments and blanks never do."""
+    if is_bare_symbol(text):
+        return True
+    if not fill_partial or "|" not in text or is_comment_line(text):
+        return False
+    fields = [part.strip() for part in text.split("|")]
+    return len(fields) < FIELD_COUNT or not all(fields[:FIELD_COUNT])
+
+
 def get_stock_profile(symbol):
     """Return (company_name, gics_sector, market_cap) for a symbol from Yahoo
     Finance.
@@ -254,28 +283,32 @@ def format_market_cap(market_cap):
     return f"${market_cap:,}"
 
 
-def fill_lines(lines):
-    """Look up every bare-symbol line in `lines` and return
-    (output_lines, unclassified): the lines with each bare symbol replaced by
-    its populated "SYM|company|sector|cap|category" line (everything else is
-    passed through unchanged), and the symbols Yahoo had no sector or market
-    cap for. Each populated line is echoed to stdout."""
+def fill_lines(lines, fill_partial=False):
+    """Look up every line in `lines` that needs_fill and return
+    (output_lines, unclassified): the lines with each one replaced by its
+    populated "SYM|company|sector|cap|category" line (everything else is
+    passed through unchanged), and the symbols still missing a sector or
+    market cap afterwards. Only blank fields are filled in; a value already on
+    the line is kept. Each populated line is echoed to stdout."""
     output_lines = []
     unclassified = []
     for line in lines:
         text = line.strip()
-        if not is_bare_symbol(text):
+        if not needs_fill(text, fill_partial):
             output_lines.append(line)
             continue
 
-        symbol = text
+        fields = [part.strip() for part in text.split("|")]
+        fields += [""] * (FIELD_COUNT - len(fields))
+        symbol = fields[0]
         company, sector, market_cap = get_stock_profile(symbol)
         category = market_cap_category(market_cap)
-        if sector is None or market_cap is None:
+        for index, value in ((1, company), (2, sector),
+                             (3, format_market_cap(market_cap)), (4, category)):
+            fields[index] = fields[index] or value or ""
+        if not fields[2] or not fields[3]:
             unclassified.append(symbol)
-        output_lines.append(
-            f"{symbol}|{company or ''}|{sector or ''}|{format_market_cap(market_cap)}|{category or ''}"
-        )
+        output_lines.append("|".join(fields))
         print(f"  {output_lines[-1]}")
     return output_lines, unclassified
 
@@ -290,27 +323,28 @@ def report_unclassified(unclassified):
 
 
 def fill_file(file_name):
-    """-f mode: populate the bare-symbol lines of one tickers file in place."""
+    """-f mode: populate the bare-symbol and partly populated lines of one
+    tickers file in place."""
     tickers_path = resolve_tickers_path(file_name)
 
     with open(tickers_path, "r") as f:
         lines = [line.rstrip("\n") for line in f]
 
-    # Only bare-symbol lines need a lookup; lines that already carry "|"
-    # fields (populated on an earlier run, or hand-edited) are kept as is.
-    symbols = [line.strip() for line in lines if is_bare_symbol(line.strip())]
+    # Bare symbols and lines with missing fields need a lookup; complete
+    # lines (populated on an earlier run, or hand-edited) are kept as is.
+    symbols = [line.strip() for line in lines if needs_fill(line.strip(), True)]
     if not symbols:
         print(
-            f"[{datetime.now()}] {os.path.basename(tickers_path)} has no new "
-            "symbols to populate; nothing to do."
+            f"[{datetime.now()}] {os.path.basename(tickers_path)} has no new or "
+            "incomplete symbols to populate; nothing to do."
         )
         return
     print(
-        f"[{datetime.now()}] Looking up company, sector and market cap for {len(symbols)} new "
-        f"symbol{'s' if len(symbols) != 1 else ''} in {os.path.basename(tickers_path)}..."
+        f"[{datetime.now()}] Looking up company, sector and market cap for {len(symbols)} new or "
+        f"incomplete symbol{'s' if len(symbols) != 1 else ''} in {os.path.basename(tickers_path)}..."
     )
 
-    output_lines, unclassified = fill_lines(lines)
+    output_lines, unclassified = fill_lines(lines, fill_partial=True)
 
     with open(tickers_path, "w") as f:
         f.write("\n".join(output_lines) + "\n")
