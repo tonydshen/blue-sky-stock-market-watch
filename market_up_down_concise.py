@@ -107,6 +107,15 @@
 # and body cells are `position: sticky; left: 0` inside the same .table-scroll
 # container that already keeps the header row sticky at the top, so the column
 # stays put on horizontal scroll and the top-left cell stays put on both axes.
+#
+# Concise version requirements, 10/01/2026:
+# 1. Add Company Name after Symbol.
+#
+# Revised on 10/01/2026: implemented requirement 1 above. The name comes from
+# the tickers file (or the Yahoo lookup for a bare symbol), goes into the CSV
+# as "company" and into the HTML as a sortable Company column capped at 24
+# characters wide (about 80% of the names in config/tickers fit); a longer
+# name is cut with an ellipsis and shown in full on hover.
 
 import os
 import sys
@@ -130,6 +139,7 @@ DEFAULT_PERIOD = "1"
 # The direction column is the only unsortable one (requirement 4).
 REPORT_COLUMNS = [
     ("symbol", "Symbol", True, "text"),
+    ("company", "Company", True, "text"),
     ("sector", "Sector", True, "text"),
     ("market_cap", "Market\nCap", True, "num"),
     ("size", "Size", True, "num"),
@@ -268,12 +278,13 @@ def read_tickers(tickers_path):
         fields = [part.strip() for part in line.split("|")]
         symbol = fields[0]
         if len(fields) == 1:
-            entries.append({"symbol": symbol, "sector": None, "market_cap": None,
-                            "size": None, "looked_up": False})
+            entries.append({"symbol": symbol, "company": None, "sector": None,
+                            "market_cap": None, "size": None, "looked_up": False})
             continue
         fields += [""] * (5 - len(fields))
         entries.append({
             "symbol": symbol,
+            "company": fields[1] or None,
             "sector": fields[2] or None,
             "market_cap": fields[3] or None,
             "size": fields[4] or None,
@@ -631,10 +642,11 @@ def get_high_low(ticker, query):
 
 
 def add_profile(row, entry):
-    """Fill the row's sector, market_cap (compact text), market_cap_value,
+    """Fill the row's company, sector, market_cap (compact text), market_cap_value,
     size and size_rank from the tickers file entry, looking the symbol up on
     Yahoo Finance when the file had only the bare symbol."""
-    sector, market_cap_text, size = entry["sector"], entry["market_cap"], entry["size"]
+    company, sector = entry["company"], entry["sector"]
+    market_cap_text, size = entry["market_cap"], entry["size"]
     if not entry["looked_up"]:
         company, sector, market_cap = get_stock_profile(entry["symbol"])
         market_cap_text = format_market_cap(market_cap) or None
@@ -645,6 +657,7 @@ def add_profile(row, entry):
         sector = QUOTE_TYPE_LABELS.get(str(row["quote_type"]).upper())
 
     market_cap_value = parse_market_cap(market_cap_text)
+    row["company"] = company
     row["sector"] = sector
     row["market_cap"] = market_cap_text
     row["market_cap_value"] = market_cap_value
@@ -824,6 +837,16 @@ REPORT_CSS = """
   td.neg { color: var(--neg); font-weight: 600; }
   td.flat { color: var(--flat); font-weight: 600; }
   td.direction { text-align: center; cursor: help; }
+  /* Company names run long (a few past 50 characters); cap the column so it
+     doesn't push the numbers off screen, and show the full name on hover.
+     The cap sits on an inner block because max-width on a table cell itself
+     is ignored by browsers. */
+  td .company {
+    display: block;
+    max-width: 24ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   header.report-header .tally {
     margin: 8px 0 0;
     font-size: 0.95rem;
@@ -1004,6 +1027,12 @@ def render_html_report(
                 continue
             if cell_type == "text" and key != "symbol":
                 classes.append("text")
+            if key == "company" and text:
+                cells.append(
+                    f'<td class="text"><span class="company" title="{html.escape(text)}">'
+                    f'{html.escape(text)}</span></td>'
+                )
+                continue
             class_attr = f' class="{" ".join(c for c in classes if c)}"' if any(classes) else ""
             if cell_type == "num":
                 sort_value = row.get(SORT_VALUE_KEYS.get(key, key))
@@ -1127,6 +1156,7 @@ def main():
 
     header = [
         "symbol",
+        "company",
         "sector",
         "market_cap",
         "size",
@@ -1182,6 +1212,7 @@ def main():
             row["direction"], row["signal"], row["direction_reason"], row["stretched"] = get_direction(row, regime, vix)
             writer.writerow([
                 row["symbol"],
+                csv_value(row["company"]),
                 csv_value(row["sector"]),
                 csv_value(row["market_cap"]),
                 csv_value(row["size"]),

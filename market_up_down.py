@@ -49,6 +49,16 @@
 # and body cells are `position: sticky; left: 0` inside the same .table-scroll
 # container that already keeps the header row sticky at the top, so the column
 # stays put on horizontal scroll and the top-left cell stays put on both axes.
+#
+# Additional requirements, 10/01/2026:
+# 1. Add Company Name after Symbol.
+#
+# Revised on 10/01/2026: implemented requirement 1 above, the same way as
+# market_up_down_concise.py. The name comes from the tickers file (or a Yahoo
+# lookup for a bare symbol), goes into the CSV as "company" and into the HTML
+# as a sortable Company column capped at 24 characters wide (about 80% of the
+# names in config/tickers fit); a longer name is cut with an ellipsis and
+# shown in full on hover.
 
 import os
 import sys
@@ -58,6 +68,8 @@ import math
 import yfinance as yf
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+
+from market_stock_sector import get_stock_profile
 
 load_dotenv()
 
@@ -71,6 +83,7 @@ DEFAULT_PERIOD = "1"
 # them is meaningless -- they're the only two columns excluded from sorting.
 REPORT_COLUMNS = [
     ("symbol", "Symbol", True, "text"),
+    ("company", "Company", True, "text"),
     ("high_price", "High\nPrice", True, "num"),
     ("high_when", "High\nDate/Hour", True, "text"),
     ("low_price", "Low\nPrice", True, "num"),
@@ -152,11 +165,12 @@ def csv_value(value):
 
 
 def read_tickers(tickers_path):
-    """Read a tickers file, returning (symbols, sector_title).
+    """Read a tickers file, returning (symbols, companies, sector_title).
 
     Each non-blank line is either a bare symbol ("AAPL") or a
-    "SYMBOL|Company Name" pair -- only the part before "|" is used as the
-    symbol. A file may optionally start with a plain title line (no "|"),
+    "SYMBOL|Company Name|..." line -- the part before the first "|" is the
+    symbol and the next field the company name. `companies` maps each symbol
+    to its name, or None for a bare symbol (looked up later). A file may optionally start with a plain title line (no "|"),
     e.g. "Health Sector", naming the sector it covers; when present it's
     returned as sector_title and excluded from the symbol list, otherwise
     sector_title is None. "#" lines are comments (e.g. the "# merged from ..."
@@ -175,8 +189,12 @@ def read_tickers(tickers_path):
         sector_title = lines[0]
         lines = lines[1:]
 
-    symbols = [line.split("|", 1)[0].strip() for line in lines]
-    return symbols, sector_title
+    symbols, companies = [], {}
+    for line in lines:
+        fields = [part.strip() for part in line.split("|")]
+        symbols.append(fields[0])
+        companies[fields[0]] = (fields[1] if len(fields) > 1 else "") or None
+    return symbols, companies, sector_title
 
 
 def resolve_tickers_path(file_name):
@@ -734,6 +752,17 @@ REPORT_CSS = """
   tbody tr:hover { background: var(--row-hover); }
   td.pos { color: var(--pos); font-weight: 600; }
   td.neg { color: var(--neg); font-weight: 600; }
+  td.text { text-align: left; }
+  /* Company names run long (a few past 50 characters); cap the column so it
+     doesn't push the numbers off screen, and show the full name on hover.
+     The cap sits on an inner block because max-width on a table cell itself
+     is ignored by browsers. */
+  td .company {
+    display: block;
+    max-width: 24ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .analysis-link {
     text-align: center;
     margin: 28px 0;
@@ -861,6 +890,11 @@ def render_html_report(
                     f'data-display-percent="{html.escape(display_percent)}" data-value="{dollar_attr}"'
                     f'{css_class}>{html.escape(display_dollar)}</td>'
                 )
+            elif key == "company":
+                cells.append(
+                    f'<td class="text"><span class="company" title="{html.escape(text)}">'
+                    f'{html.escape(text)}</span></td>'
+                )
             elif cell_type == "num":
                 data_value = "" if value is None else str(value)
                 cells.append(f'<td data-value="{data_value}"{css_class}>{html.escape(text)}</td>')
@@ -975,7 +1009,7 @@ def render_html_report(
 
 def main():
     query, start_date, end_date, tickers_path = parse_args(sys.argv)
-    tickers, sector_title = read_tickers(tickers_path)
+    tickers, companies, sector_title = read_tickers(tickers_path)
 
     start_label = start_date.strftime("%m/%d/%Y")
     end_label = end_date.strftime("%m/%d/%Y")
@@ -1002,6 +1036,7 @@ def main():
 
     header = [
         "symbol",
+        "company",
         "high_price",
         "high_date_hour",
         "low_price",
@@ -1048,8 +1083,11 @@ def main():
             if row is None:
                 print(f"  {ticker}: no data available")
                 continue
+            # A bare symbol in the tickers file has no name; ask Yahoo for one.
+            row["company"] = companies.get(ticker) or get_stock_profile(ticker)[0]
             writer.writerow([
                 row["symbol"],
+                csv_value(row["company"]),
                 row["high_price"],
                 row["high_when"],
                 row["low_price"],
