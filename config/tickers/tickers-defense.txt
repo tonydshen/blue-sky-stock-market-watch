@@ -1,0 +1,11 @@
+Defense Sector
+BA|The Boeing Company|Industrials|$152.98B|Large
+GD|General Dynamics Corporation|Industrials|$89.31B|Large
+GE|GE Aerospace|Industrials|$321.19B|Mega
+GHM|Graham Corporation|Industrials|$1.07B|Small
+HWM|Howmet Aerospace Inc.|Industrials|$92.23B|Large
+LMT|Lockheed Martin Corporation|Industrials|$116.64B|Large
+NOC|Northrop Grumman Corporation|Industrials|$67.91B|Large
+RTX|RTX Corporation|Industrials|$248.90B|Mega
+SAABY|Saab AB (publ)|Industrials|$33.07B|Large
+SAIC|Science Applications International Corporation|Information Technology|$5.25B|Mid
