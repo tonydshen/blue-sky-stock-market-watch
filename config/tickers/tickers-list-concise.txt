@@ -3,3 +3,4 @@ tickers-health.txt
 tickers-ai.txt
 tickers-chinese-interested-stocks.txt
 tickers-nasdaq100+sndk.txt
+tickers-defense.txt
